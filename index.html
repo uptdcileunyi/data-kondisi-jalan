@@ -268,615 +268,605 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
- <script>
-    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzjTyqWxOiKWhnTGC4p4dxTzaiNUsKPq1K76shnQGozd0_2fmT1VtZZZIDEUHjia0uJ/exec';
-    const GEOJSON_URL = 'https://raw.githubusercontent.com/uptdcileunyi/data-kondisi-jalan/refs/heads/main/ruas_jalan.geojson';
+    <script>
+        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzjTyqWxOiKWhnTGC4p4dxTzaiNUsKPq1K76shnQGozd0_2fmT1VtZZZIDEUHjia0uJ/exec';
+        const GEOJSON_URL = 'https://raw.githubusercontent.com/uptdcileunyi/data-kondisi-jalan/refs/heads/main/ruas_jalan.geojson';
 
-    let map, conditionChart, trendChart, roadTrendChart;
-    let roadData = [], selectedRoad = null, selectedYear = null;
-    let allHeaders = [];
-    let geojsonLayer = null;
+        let map, conditionChart, trendChart, roadTrendChart;
+        let roadData = [], selectedRoad = null, selectedYear = null;
+        let allHeaders = [];
+        let geojsonLayer = null;
 
-    document.addEventListener('DOMContentLoaded', function() {
-        initializeMap();
-        loadData();
-    });
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            loadData();
+        });
 
-    function initializeMap() {
-        console.log('Initializing map...');
-        map = L.map('map').setView([-6.9431, 107.7539], 13);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19
-        }).addTo(map);
-        
-        console.log('Map initialized');
-    }
-
-    async function loadData() {
-        try {
-            console.log('Loading data from:', GAS_API_URL);
-            const response = await fetch(GAS_API_URL);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        function initializeMap() {
+            console.log('Initializing map...');
+            map = L.map('map').setView([-6.9431, 107.7539], 12);
             
-            const result = await response.json();
-            console.log('API Response:', result);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
             
-            if (result.success && result.data.length > 0) {
-                allHeaders = Object.keys(result.data[0]);
-                console.log('Headers:', allHeaders);
+            console.log('Map initialized at [-6.9431, 107.7539] zoom 12');
+        }
+
+        async function loadData() {
+            try {
+                console.log('Loading data from:', GAS_API_URL);
+                const response = await fetch(GAS_API_URL);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 
-                roadData = result.data.map(row => {
-                    const normalized = {};
-                    for (let key in row) {
-                        const cleanKey = key.toString().trim();
-                        let value = row[key];
-                        
-                        if (['PANJANG', 'BAIK (KM)', 'BAIK (%)', 'SEDANG (KM)', 'SEDANG (%)', 
-                             'RUSAK (KM)', 'RUSAK (%)', 'BERAT (KM)', 'BERAT (%)',
-                             'LASTON (KM)', 'LASTON (%)', 'BIDIRI (KM)', 'BIDIRI (%)',
-                             'TANAH (KM)', 'TANAH (%)', 'BATU (KM)', 'BATU (%)',
-                             'PENETRASI (KM)', 'PENETRASI (%)', 'RINGAN (KM)', 'RINGAN (%)',
-                             'RIGID (KM)', 'RIGID (%)'].includes(cleanKey)) {
-                            value = parseFloat(value) || 0;
-                        } else if (cleanKey === 'TAHUN') {
-                            value = parseInt(value) || 2026;
-                        } else {
-                            value = String(value || '').trim();
-                        }
-                        
-                        normalized[cleanKey] = value;
-                    }
-                    return normalized;
-                }).filter(row => row['NAMA RUAS JALAN'] && row['NAMA RUAS JALAN'] !== '');
-
-                console.log(`✅ Berhasil memuat ${roadData.length} data ruas jalan`);
-                console.log('Sample road names:', roadData.slice(0, 3).map(r => r['NAMA RUAS JALAN']));
+                const result = await response.json();
+                console.log('API Response:', result);
                 
-                populateFilters();
-                applyFilter();
-                updateTrendChart();
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
-            } else {
-                throw new Error(result.error || 'Data kosong');
-            }
-        } catch (error) {
-            console.error(" Gagal memuat data:", error);
-            document.getElementById('loading').style.display = 'none';
-            const errDiv = document.getElementById('errorMsg');
-            errDiv.innerHTML = `<strong>Gagal memuat data!</strong><br><small>Error: ${error.message}</small>`;
-            errDiv.style.display = 'block';
-        }
-    }
-
-    function populateFilters() {
-        const roadFilter = document.getElementById('roadFilter');
-        const yearFilter = document.getElementById('yearFilter');
-        
-        const roads = [...new Set(roadData.map(row => row['NAMA RUAS JALAN']))].sort();
-        console.log('Available roads:', roads);
-        
-        roads.forEach(road => {
-            const option = document.createElement('option');
-            option.value = road;
-            option.textContent = road;
-            roadFilter.appendChild(option);
-        });
-        
-        const years = [...new Set(roadData.map(row => row['TAHUN']))].sort().reverse();
-        years.forEach(year => {
-            const option = document.createElement('option');
-            option.value = year;
-            option.textContent = year;
-            yearFilter.appendChild(option);
-        });
-        
-        if (years.length > 0) {
-            document.getElementById('currentYear').textContent = years[0];
-        }
-    }
-
-    function applyFilter() {
-        selectedRoad = document.getElementById('roadFilter').value;
-        selectedYear = document.getElementById('yearFilter').value;
-        
-        console.log('Applying filter - Road:', selectedRoad, 'Year:', selectedYear);
-        
-        let filteredData = roadData;
-        if (selectedRoad) filteredData = filteredData.filter(row => row['NAMA RUAS JALAN'] === selectedRoad);
-        if (selectedYear) filteredData = filteredData.filter(row => row['TAHUN'] == selectedYear);
-        
-        console.log('Filtered data count:', filteredData.length);
-        updateDashboard(filteredData);
-    }
-
-    function updateDashboard(data) {
-        updateStats(data);
-        updateMap(data);
-        updateChart(data);
-        updateTable(data);
-        updateDetailSection(data);
-    }
-
-    function updateStats(data) {
-        let totalLength = 0, goodLength = 0, moderateLength = 0, badLength = 0;
-        data.forEach(row => {
-            totalLength += row['PANJANG'] || 0;
-            goodLength += row['BAIK (KM)'] || 0;
-            moderateLength += row['SEDANG (KM)'] || 0;
-            badLength += row['RUSAK (KM)'] || 0;
-        });
-        
-        document.getElementById('totalLength').textContent = totalLength.toFixed(2) + ' km';
-        document.getElementById('goodCondition').textContent = goodLength.toFixed(2) + ' km';
-        document.getElementById('moderateCondition').textContent = moderateLength.toFixed(2) + ' km';
-        document.getElementById('badCondition').textContent = badLength.toFixed(2) + ' km';
-        
-        if (totalLength > 0) {
-            document.getElementById('goodPercent').textContent = Math.round((goodLength / totalLength) * 100) + '%';
-            document.getElementById('moderatePercent').textContent = Math.round((moderateLength / totalLength) * 100) + '%';
-            document.getElementById('badPercent').textContent = Math.round((badLength / totalLength) * 100) + '%';
-        }
-    }
-// ============================================================
-//  FUNGSI BARU: Helper untuk mendapatkan nama jalan dari GeoJSON
-//  LETAKKAN DI ANTARA updateStats() DAN updateMap()
-// ============================================================
-function getRoadNameFromFeature(feature) {
-    const props = feature.properties;
-    return props.Name || props.Nama_Ruas || props.name || props.NAMA || props.NAMA_RUAS_JALAN || '';
-}
-    // Fungsi helper untuk mendapatkan nama jalan dari GeoJSON
-    function getRoadNameFromFeature(feature) {
-        // Cek berbagai kemungkinan property name (case-insensitive)
-        const props = feature.properties;
-        return props.Name || props.Nama_Ruas || props.name || props.NAMA || props.NAMA_RUAS_JALAN || '';
-    }
-
-   // ============================================================
-// 🔄 FUNGSI UPDATE MAP (VERSI BARU DENGAN AUTO-ZOOM & HIGHLIGHT)
-// 📍 GANTI SELURUH FUNGSI updateMap() YANG LAMA
-// ============================================================
-async function updateMap(data) {
-    console.log('Updating map with', data.length, 'roads');
-    
-    // Hapus layer GeoJSON lama jika ada
-    if (geojsonLayer) {
-        map.removeLayer(geojsonLayer);
-        console.log('Removed old GeoJSON layer');
-    }
-    
-    try {
-        console.log('Fetching GeoJSON from:', GEOJSON_URL);
-        const response = await fetch(GEOJSON_URL);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const geojson = await response.json();
-        console.log('✅ GeoJSON loaded');
-        console.log('Total features in GeoJSON:', geojson.features.length);
-        
-        if (!geojson.features || geojson.features.length === 0) {
-            throw new Error('GeoJSON tidak memiliki features');
-        }
-        
-        // Tampilkan SEMUA ruas jalan dari GeoJSON dengan style berbeda
-        geojsonLayer = L.geoJSON(geojson, {
-            style: function(feature) {
-                const roadName = getRoadNameFromFeature(feature);
-                const roadDataItem = data.find(row => row['NAMA RUAS JALAN'] === roadName);
-                
-                // Cek apakah ini ruas jalan yang sedang dipilih
-                const isSelected = selectedRoad && roadName === selectedRoad;
-                
-                // === LOGIKA HIGHLIGHT ===
-                if (selectedRoad) {
-                    if (isSelected) {
-                        // 🎯 HIGHLIGHT: ruas jalan yang dipilih
-                        if (roadDataItem) {
-                            const total = (roadDataItem['BAIK (KM)'] || 0) + (roadDataItem['SEDANG (KM)'] || 0) + (roadDataItem['RUSAK (KM)'] || 0);
-                            if (total === 0 || ((roadDataItem['BAIK (KM)'] || 0) / total) > 0.7) {
-                                return { color: '#10b981', weight: 8, opacity: 1 };
-                            } else if (((roadDataItem['RUSAK (KM)'] || 0) / total) > 0.3) {
-                                return { color: '#ef4444', weight: 8, opacity: 1 };
+                if (result.success && result.data.length > 0) {
+                    allHeaders = Object.keys(result.data[0]);
+                    console.log('Headers:', allHeaders);
+                    
+                    roadData = result.data.map(row => {
+                        const normalized = {};
+                        for (let key in row) {
+                            const cleanKey = key.toString().trim();
+                            let value = row[key];
+                            
+                            if (['PANJANG', 'BAIK (KM)', 'BAIK (%)', 'SEDANG (KM)', 'SEDANG (%)', 
+                                 'RUSAK (KM)', 'RUSAK (%)', 'BERAT (KM)', 'BERAT (%)',
+                                 'LASTON (KM)', 'LASTON (%)', 'BIDIRI (KM)', 'BIDIRI (%)',
+                                 'TANAH (KM)', 'TANAH (%)', 'BATU (KM)', 'BATU (%)',
+                                 'PENETRASI (KM)', 'PENETRASI (%)', 'RINGAN (KM)', 'RINGAN (%)',
+                                 'RIGID (KM)', 'RIGID (%)'].includes(cleanKey)) {
+                                value = parseFloat(value) || 0;
+                            } else if (cleanKey === 'TAHUN') {
+                                value = parseInt(value) || 2026;
                             } else {
-                                return { color: '#f59e0b', weight: 8, opacity: 1 };
+                                value = String(value || '').trim();
                             }
+                            
+                            normalized[cleanKey] = value;
                         }
-                        return { color: '#1f6366', weight: 8, opacity: 1 };
+                        return normalized;
+                    }).filter(row => row['NAMA RUAS JALAN'] && row['NAMA RUAS JALAN'] !== '');
+
+                    console.log(`✅ Berhasil memuat ${roadData.length} data ruas jalan`);
+                    console.log('Sample road names:', roadData.slice(0, 3).map(r => r['NAMA RUAS JALAN']));
+                    
+                    populateFilters();
+                    applyFilter();
+                    updateTrendChart();
+                    
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                    
+                    setTimeout(() => {
+                        if (map) {
+                            map.invalidateSize();
+                            console.log('✅ Map size invalidated');
+                        }
+                    }, 100);
+                } else {
+                    throw new Error(result.error || 'Data kosong');
+                }
+            } catch (error) {
+                console.error("❌ Gagal memuat data:", error);
+                document.getElementById('loading').style.display = 'none';
+                const errDiv = document.getElementById('errorMsg');
+                errDiv.innerHTML = `<strong>Gagal memuat data!</strong><br><small>Error: ${error.message}</small>`;
+                errDiv.style.display = 'block';
+            }
+        }
+
+        function populateFilters() {
+            const roadFilter = document.getElementById('roadFilter');
+            const yearFilter = document.getElementById('yearFilter');
+            
+            const roads = [...new Set(roadData.map(row => row['NAMA RUAS JALAN']))].sort();
+            console.log('Available roads:', roads);
+            
+            roads.forEach(road => {
+                const option = document.createElement('option');
+                option.value = road;
+                option.textContent = road;
+                roadFilter.appendChild(option);
+            });
+            
+            const years = [...new Set(roadData.map(row => row['TAHUN']))].sort().reverse();
+            years.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearFilter.appendChild(option);
+            });
+            
+            if (years.length > 0) {
+                document.getElementById('currentYear').textContent = years[0];
+            }
+        }
+
+        function applyFilter() {
+            selectedRoad = document.getElementById('roadFilter').value;
+            selectedYear = document.getElementById('yearFilter').value;
+            
+            console.log('Applying filter - Road:', selectedRoad, 'Year:', selectedYear);
+            
+            let filteredData = roadData;
+            if (selectedRoad) filteredData = filteredData.filter(row => row['NAMA RUAS JALAN'] === selectedRoad);
+            if (selectedYear) filteredData = filteredData.filter(row => row['TAHUN'] == selectedYear);
+            
+            console.log('Filtered data count:', filteredData.length);
+            updateDashboard(filteredData);
+        }
+
+        function updateDashboard(data) {
+            updateStats(data);
+            updateMap(data);
+            updateChart(data);
+            updateTable(data);
+            updateDetailSection(data);
+        }
+
+        function updateStats(data) {
+            let totalLength = 0, goodLength = 0, moderateLength = 0, badLength = 0;
+            data.forEach(row => {
+                totalLength += row['PANJANG'] || 0;
+                goodLength += row['BAIK (KM)'] || 0;
+                moderateLength += row['SEDANG (KM)'] || 0;
+                badLength += row['RUSAK (KM)'] || 0;
+            });
+            
+            document.getElementById('totalLength').textContent = totalLength.toFixed(2) + ' km';
+            document.getElementById('goodCondition').textContent = goodLength.toFixed(2) + ' km';
+            document.getElementById('moderateCondition').textContent = moderateLength.toFixed(2) + ' km';
+            document.getElementById('badCondition').textContent = badLength.toFixed(2) + ' km';
+            
+            if (totalLength > 0) {
+                document.getElementById('goodPercent').textContent = Math.round((goodLength / totalLength) * 100) + '%';
+                document.getElementById('moderatePercent').textContent = Math.round((moderateLength / totalLength) * 100) + '%';
+                document.getElementById('badPercent').textContent = Math.round((badLength / totalLength) * 100) + '%';
+            }
+        }
+
+        function getRoadNameFromFeature(feature) {
+            const props = feature.properties;
+            return props.Name || props.Nama_Ruas || props.name || props.NAMA || props.NAMA_RUAS_JALAN || '';
+        }
+
+        async function updateMap(data) {
+            console.log('Updating map with', data.length, 'roads');
+            
+            if (geojsonLayer) {
+                map.removeLayer(geojsonLayer);
+                console.log('Removed old GeoJSON layer');
+            }
+            
+            try {
+                console.log('Fetching GeoJSON from:', GEOJSON_URL);
+                const response = await fetch(GEOJSON_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const geojson = await response.json();
+                console.log('✅ GeoJSON loaded');
+                console.log('Total features in GeoJSON:', geojson.features.length);
+                
+                if (!geojson.features || geojson.features.length === 0) {
+                    throw new Error('GeoJSON tidak memiliki features');
+                }
+                
+                geojsonLayer = L.geoJSON(geojson, {
+                    style: function(feature) {
+                        const roadName = getRoadNameFromFeature(feature);
+                        const roadDataItem = data.find(row => row['NAMA RUAS JALAN'] === roadName);
+                        const isSelected = selectedRoad && roadName === selectedRoad;
+                        
+                        if (selectedRoad) {
+                            if (isSelected) {
+                                if (roadDataItem) {
+                                    const total = (roadDataItem['BAIK (KM)'] || 0) + (roadDataItem['SEDANG (KM)'] || 0) + (roadDataItem['RUSAK (KM)'] || 0);
+                                    if (total === 0 || ((roadDataItem['BAIK (KM)'] || 0) / total) > 0.7) {
+                                        return { color: '#10b981', weight: 8, opacity: 1 };
+                                    } else if (((roadDataItem['RUSAK (KM)'] || 0) / total) > 0.3) {
+                                        return { color: '#ef4444', weight: 8, opacity: 1 };
+                                    } else {
+                                        return { color: '#f59e0b', weight: 8, opacity: 1 };
+                                    }
+                                }
+                                return { color: '#1f6366', weight: 8, opacity: 1 };
+                            } else {
+                                return { color: '#9ca3af', weight: 2, opacity: 0.2, dashArray: '5, 5' };
+                            }
+                        } else {
+                            if (roadDataItem) {
+                                const total = (roadDataItem['BAIK (KM)'] || 0) + (roadDataItem['SEDANG (KM)'] || 0) + (roadDataItem['RUSAK (KM)'] || 0);
+                                if (total === 0 || ((roadDataItem['BAIK (KM)'] || 0) / total) > 0.7) {
+                                    return { color: '#10b981', weight: 5, opacity: 0.9 };
+                                } else if (((roadDataItem['RUSAK (KM)'] || 0) / total) > 0.3) {
+                                    return { color: '#ef4444', weight: 5, opacity: 0.9 };
+                                } else {
+                                    return { color: '#f59e0b', weight: 5, opacity: 0.9 };
+                                }
+                            }
+                            return { color: '#1f6366', weight: 3, opacity: 0.7 };
+                        }
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const roadName = getRoadNameFromFeature(feature);
+                        const roadDataItem = data.find(row => row['NAMA RUAS JALAN'] === roadName);
+                        
+                        if (roadDataItem) {
+                            const panjang = roadDataItem['PANJANG'] || 0;
+                            const baik = roadDataItem['BAIK (KM)'] || 0;
+                            const sedang = roadDataItem['SEDANG (KM)'] || 0;
+                            const rusak = roadDataItem['RUSAK (KM)'] || 0;
+                            
+                            const popupContent = `
+                                <div style="min-width: 200px;">
+                                    <strong style="font-size:14px; color:#1f6366; display:block; margin-bottom:8px;">${roadName}</strong>
+                                    <hr style="margin:8px 0; border:0; border-top:1px solid #eee;">
+                                    <table style="width:100%; font-size:12px;">
+                                        <tr><td>Panjang:</td><td><b>${panjang.toFixed(2)} km</b></td></tr>
+                                        <tr><td>Baik:</td><td style="color:#10b981;">${baik.toFixed(2)} km</td></tr>
+                                        <tr><td>Sedang:</td><td style="color:#f59e0b;">${sedang.toFixed(2)} km</td></tr>
+                                        <tr><td>Rusak:</td><td style="color:#ef4444;">${rusak.toFixed(2)} km</td></tr>
+                                    </table>
+                                </div>
+                            `;
+                            layer.bindPopup(popupContent);
+                        }
+                        
+                        layer.on('click', function() {
+                            document.getElementById('roadFilter').value = roadName;
+                            applyFilter();
+                        });
+                        
+                        if (selectedRoad && roadName === selectedRoad && roadDataItem) {
+                            setTimeout(() => {
+                                layer.openPopup();
+                            }, 300);
+                        }
+                    }
+                }).addTo(map);
+                
+                if (selectedRoad && geojsonLayer.getLayers().length > 0) {
+                    const selectedLayer = geojsonLayer.getLayers().find(layer => {
+                        const props = layer.feature?.properties;
+                        const name = props?.Name || props?.Nama_Ruas || props?.name || props?.NAMA || '';
+                        return name === selectedRoad;
+                    });
+                    
+                    if (selectedLayer) {
+                        map.fitBounds(selectedLayer.getBounds(), { 
+                            padding: [80, 80],
+                            maxZoom: 16,
+                            animate: true,
+                            duration: 1.5
+                        });
+                        console.log('✅ Map zoomed to selected road:', selectedRoad);
                     } else {
-                        // 👻 BACKGROUND: ruas jalan lain (transparan)
-                        return { color: '#9ca3af', weight: 2, opacity: 0.2, dashArray: '5, 5' };
+                        map.fitBounds(geojsonLayer.getBounds(), { padding: [50, 50] });
                     }
                 } else {
-                    // 🗺️ TIDAK ADA FILTER: tampilkan semua dengan warna kondisi
-                    if (roadDataItem) {
-                        const total = (roadDataItem['BAIK (KM)'] || 0) + (roadDataItem['SEDANG (KM)'] || 0) + (roadDataItem['RUSAK (KM)'] || 0);
-                        if (total === 0 || ((roadDataItem['BAIK (KM)'] || 0) / total) > 0.7) {
-                            return { color: '#10b981', weight: 5, opacity: 0.9 };
-                        } else if (((roadDataItem['RUSAK (KM)'] || 0) / total) > 0.3) {
-                            return { color: '#ef4444', weight: 5, opacity: 0.9 };
-                        } else {
-                            return { color: '#f59e0b', weight: 5, opacity: 0.9 };
-                        }
+                    if (geojsonLayer.getLayers().length > 0) {
+                        map.fitBounds(geojsonLayer.getBounds(), { padding: [50, 50] });
                     }
-                    return { color: '#1f6366', weight: 3, opacity: 0.7 };
                 }
-            },
-            onEachFeature: function(feature, layer) {
-                const roadName = getRoadNameFromFeature(feature);
-                const roadDataItem = data.find(row => row['NAMA RUAS JALAN'] === roadName);
                 
-                // Popup content
-                if (roadDataItem) {
-                    const popupContent = `
-                        <div style="min-width: 200px;">
-                            <strong style="font-size:14px; color:#1f6366; display:block; margin-bottom:8px;">${roadName}</strong>
-                            <hr style="margin:8px 0; border:0; border-top:1px solid #eee;">
-                            <table style="width:100%; font-size:12px;">
-                                <tr><td>Panjang:</td><td><b>${roadDataItem['PANJANG']} km</b></td></tr>
-                                <tr><td>Baik:</td><td style="color:#10b981;">${roadDataItem['BAIK (KM)']} km</td></tr>
-                                <tr><td>Sedang:</td><td style="color:#f59e0b;">${roadDataItem['SEDANG (KM)']} km</td></tr>
-                                <tr><td>Rusak:</td><td style="color:#ef4444;">${roadDataItem['RUSAK (KM)']} km</td></tr>
-                            </table>
+                setTimeout(() => {
+                    if (map) {
+                        map.invalidateSize();
+                    }
+                }, 200);
+                
+            } catch (error) {
+                console.error('❌ GeoJSON load error:', error);
+                showMapWarning(`
+                    <strong>GeoJSON Tidak Ditemukan atau Error</strong><br><br>
+                    URL: ${GEOJSON_URL}<br>
+                    Error: ${error.message}
+                `);
+            }
+        }
+
+        function showMapWarning(message) {
+            const warningHTML = `
+                <div style="
+                    background: #fef3c7;
+                    border: 2px solid #f59e0b;
+                    border-radius: 8px;
+                    padding: 1.5rem;
+                    margin: 1rem;
+                    font-size: 0.9rem;
+                    line-height: 1.6;
+                ">
+                    <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+                    ${message}
+                </div>
+            `;
+            
+            const mapContainer = document.getElementById('map');
+            mapContainer.innerHTML = warningHTML;
+            
+            setTimeout(() => {
+                if (!map || !map._container) {
+                    initializeMap();
+                }
+            }, 100);
+        }
+
+        function updateChart(data) {
+            const ctx = document.getElementById('conditionChart').getContext('2d');
+            let goodLength = 0, moderateLength = 0, badLength = 0;
+            
+            data.forEach(row => {
+                goodLength += row['BAIK (KM)'] || 0;
+                moderateLength += row['SEDANG (KM)'] || 0;
+                badLength += row['RUSAK (KM)'] || 0;
+            });
+            
+            if (conditionChart) conditionChart.destroy();
+            
+            conditionChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Baik', 'Sedang', 'Rusak'],
+                    datasets: [{
+                        data: [goodLength, moderateLength, badLength],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } }
+                    }
+                }
+            });
+        }
+
+        function updateTrendChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            const years = [...new Set(roadData.map(row => row['TAHUN']))].sort();
+            
+            const goodByYear = [];
+            const moderateByYear = [];
+            const badByYear = [];
+            const totalByYear = [];
+            
+            years.forEach(year => {
+                const yearData = roadData.filter(row => row['TAHUN'] === year);
+                let good = 0, moderate = 0, bad = 0, total = 0;
+                
+                yearData.forEach(row => {
+                    good += row['BAIK (KM)'] || 0;
+                    moderate += row['SEDANG (KM)'] || 0;
+                    bad += row['RUSAK (KM)'] || 0;
+                    total += row['PANJANG'] || 0;
+                });
+                
+                goodByYear.push(good);
+                moderateByYear.push(moderate);
+                badByYear.push(bad);
+                totalByYear.push(total);
+            });
+            
+            if (trendChart) trendChart.destroy();
+            
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: years,
+                    datasets: [
+                        { label: 'Kondisi Baik (km)', data: goodByYear, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Kondisi Sedang (km)', data: moderateByYear, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Kondisi Rusak (km)', data: badByYear, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Total Panjang (km)', data: totalByYear, borderColor: '#1f6366', backgroundColor: 'rgba(31, 99, 102, 0.1)', tension: 0.4, fill: false, borderDash: [5, 5] }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } } },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Panjang (km)' } } }
+                }
+            });
+        }
+
+        function updateTable(data) {
+            const thead = document.getElementById('tableHead');
+            const tbody = document.getElementById('tableBody');
+            
+            const displayColumns = ['NAMA RUAS JALAN', 'PANJANG', 'DESA KIRI', 'DESA KANAN', 'BAIK (KM)', 'SEDANG (KM)', 'RUSAK (KM)'];
+            
+            thead.innerHTML = '<tr>' + displayColumns.map(col => `<th>${col}</th>`).join('') + '<th>Status</th></tr>';
+            
+            tbody.innerHTML = '';
+            data.forEach(row => {
+                const total = (row['BAIK (KM)'] || 0) + (row['SEDANG (KM)'] || 0) + (row['RUSAK (KM)'] || 0);
+                let status = 'Sedang', badgeClass = 'badge-moderate';
+                
+                if (total === 0 || ((row['BAIK (KM)'] || 0) / total) > 0.7) {
+                    status = 'Baik'; badgeClass = 'badge-good';
+                } else if (((row['RUSAK (KM)'] || 0) / total) > 0.3) {
+                    status = 'Rusak'; badgeClass = 'badge-bad';
+                }
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${row['NAMA RUAS JALAN'] || '-'}</strong></td>
+                    <td>${(row['PANJANG'] || 0).toFixed(2)}</td>
+                    <td>${row['DESA KIRI'] || '-'}</td>
+                    <td>${row['DESA KANAN'] || '-'}</td>
+                    <td>${(row['BAIK (KM)'] || 0).toFixed(2)}</td>
+                    <td>${(row['SEDANG (KM)'] || 0).toFixed(2)}</td>
+                    <td>${(row['RUSAK (KM)'] || 0).toFixed(2)}</td>
+                    <td><span class="badge ${badgeClass}">${status}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function formatKM(value) {
+            return (parseFloat(value) || 0).toFixed(2);
+        }
+        
+        function formatPercent(value) {
+            return Math.round(parseFloat(value) || 0);
+        }
+        
+        function calculatePercent(kmValue, totalPanjang) {
+            if (!totalPanjang || totalPanjang === 0) return 0;
+            return Math.round((kmValue / totalPanjang) * 100);
+        }
+
+        function updateDetailSection(data) {
+            const detailSection = document.getElementById('detailSection');
+            
+            if (selectedRoad && data.length > 0) {
+                detailSection.style.display = 'block';
+                document.getElementById('detailRoadName').textContent = selectedRoad;
+                
+                const currentRow = data[0];
+                const totalPanjang = currentRow['PANJANG'] || 0;
+                
+                const allDataDiv = document.getElementById('roadDetailAll');
+                allDataDiv.innerHTML = '';
+                
+                const displayFields = allHeaders.filter(h => h !== 'TAHUN' && h !== 'SATUAN');
+                
+                displayFields.forEach(header => {
+                    if (header && currentRow[header] !== undefined && currentRow[header] !== '') {
+                        const item = document.createElement('div');
+                        item.className = 'detail-item';
+                        
+                        let value = currentRow[header];
+                        let displayValue = value;
+                        let unit = '';
+                        
+                        if (header.includes('(KM)') || header === 'PANJANG') {
+                            displayValue = formatKM(value);
+                            unit = 'km';
+                        } else if (header.includes('(%)')) {
+                            const kmHeader = header.replace('(%)', '(KM)');
+                            const kmValue = currentRow[kmHeader] || 0;
+                            displayValue = calculatePercent(kmValue, totalPanjang);
+                            unit = '%';
+                        }
+                        
+                        item.innerHTML = `
+                            <div class="detail-label">${header}</div>
+                            <div class="detail-value">${displayValue} <span class="detail-unit">${unit}</span></div>
+                        `;
+                        allDataDiv.appendChild(item);
+                    }
+                });
+                
+                const conditionDiv = document.getElementById('roadDetailCondition');
+                conditionDiv.innerHTML = '';
+                
+                const conditionGroups = [
+                    { label: 'Panjang Total', km: 'PANJANG', percent: null },
+                    { label: 'Kondisi Baik', km: 'BAIK (KM)', percent: 'BAIK (%)' },
+                    { label: 'Kondisi Sedang', km: 'SEDANG (KM)', percent: 'SEDANG (%)' },
+                    { label: 'Kondisi Rusak', km: 'RUSAK (KM)', percent: 'RUSAK (%)' }
+                ];
+                
+                conditionGroups.forEach(group => {
+                    const item = document.createElement('div');
+                    item.className = 'detail-item';
+                    
+                    let kmValue = currentRow[group.km] !== undefined ? formatKM(currentRow[group.km]) : '-';
+                    let percentValue = group.percent ? calculatePercent(currentRow[group.km] || 0, totalPanjang) : null;
+                    
+                    let color = 'var(--gray-800)';
+                    if (group.label.includes('Baik')) color = 'var(--success)';
+                    else if (group.label.includes('Sedang')) color = 'var(--warning)';
+                    else if (group.label.includes('Rusak')) color = 'var(--danger)';
+                    
+                    item.innerHTML = `
+                        <div class="detail-label">${group.label}</div>
+                        <div class="detail-group">
+                            <span class="detail-main" style="color: ${color};">${kmValue} km</span>
+                            ${percentValue !== null ? `<span class="detail-sub">(${percentValue}%)</span>` : ''}
                         </div>
                     `;
-                    layer.bindPopup(popupContent);
-                }
-                
-                // Click event
-                layer.on('click', function() {
-                    document.getElementById('roadFilter').value = roadName;
-                    applyFilter();
-                });
-                
-                // Auto-open popup untuk ruas jalan yang dipilih
-                if (selectedRoad && roadName === selectedRoad && roadDataItem) {
-                    setTimeout(() => {
-                        layer.openPopup();
-                    }, 300);
-                }
-            }
-        }).addTo(map);
-        
-        // === 🎯 FITUR AUTO-ZOOM ===
-        if (selectedRoad && geojsonLayer.getLayers().length > 0) {
-            // Cari layer yang sesuai dengan ruas jalan yang dipilih
-            const selectedLayer = geojsonLayer.getLayers().find(layer => {
-                const props = layer.feature?.properties;
-                const name = props?.Name || props?.Nama_Ruas || props?.name || props?.NAMA || '';
-                return name === selectedRoad;
-            });
-            
-            if (selectedLayer) {
-                // Zoom ke bounds ruas jalan yang dipilih
-                map.fitBounds(selectedLayer.getBounds(), { 
-                    padding: [80, 80],
-                    maxZoom: 16,
-                    animate: true,
-                    duration: 1.5
-                });
-                console.log('✅ Map zoomed to selected road:', selectedRoad);
-            } else {
-                // Fallback
-                map.fitBounds(geojsonLayer.getBounds(), { padding: [50, 50] });
-            }
-        } else {
-            // Tidak ada filter - zoom ke semua
-            if (geojsonLayer.getLayers().length > 0) {
-                map.fitBounds(geojsonLayer.getBounds(), { padding: [50, 50] });
-            }
-        }
-        
-    } catch (error) {
-        console.error('❌ GeoJSON load error:', error);
-        showMapWarning(`
-            <strong>GeoJSON Tidak Ditemukan atau Error</strong><br><br>
-            URL: ${GEOJSON_URL}<br>
-            Error: ${error.message}
-        `);
-    }
-}
-    function showMapWarning(message) {
-        const warningHTML = `
-            <div style="
-                background: #fef3c7;
-                border: 2px solid #f59e0b;
-                border-radius: 8px;
-                padding: 1.5rem;
-                margin: 1rem;
-                font-size: 0.9rem;
-                line-height: 1.6;
-            ">
-                <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
-                ${message}
-            </div>
-        `;
-        
-        const mapContainer = document.getElementById('map');
-        mapContainer.innerHTML = warningHTML;
-        
-        // Re-initialize map
-        setTimeout(() => {
-            if (!map || !map._container) {
-                initializeMap();
-            }
-        }, 100);
-    }
-
-    function updateChart(data) {
-        const ctx = document.getElementById('conditionChart').getContext('2d');
-        let goodLength = 0, moderateLength = 0, badLength = 0;
-        
-        data.forEach(row => {
-            goodLength += row['BAIK (KM)'] || 0;
-            moderateLength += row['SEDANG (KM)'] || 0;
-            badLength += row['RUSAK (KM)'] || 0;
-        });
-        
-        if (conditionChart) conditionChart.destroy();
-        
-        conditionChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Baik', 'Sedang', 'Rusak'],
-                datasets: [{
-                    data: [goodLength, moderateLength, badLength],
-                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
-                    borderWidth: 2,
-                    borderColor: '#ffffff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } }
-                }
-            }
-        });
-    }
-
-    function updateTrendChart() {
-        const ctx = document.getElementById('trendChart').getContext('2d');
-        const years = [...new Set(roadData.map(row => row['TAHUN']))].sort();
-        
-        const goodByYear = [];
-        const moderateByYear = [];
-        const badByYear = [];
-        const totalByYear = [];
-        
-        years.forEach(year => {
-            const yearData = roadData.filter(row => row['TAHUN'] === year);
-            let good = 0, moderate = 0, bad = 0, total = 0;
-            
-            yearData.forEach(row => {
-                good += row['BAIK (KM)'] || 0;
-                moderate += row['SEDANG (KM)'] || 0;
-                bad += row['RUSAK (KM)'] || 0;
-                total += row['PANJANG'] || 0;
-            });
-            
-            goodByYear.push(good);
-            moderateByYear.push(moderate);
-            badByYear.push(bad);
-            totalByYear.push(total);
-        });
-        
-        if (trendChart) trendChart.destroy();
-        
-        trendChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: years,
-                datasets: [
-                    { label: 'Kondisi Baik (km)', data: goodByYear, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4, fill: true },
-                    { label: 'Kondisi Sedang (km)', data: moderateByYear, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4, fill: true },
-                    { label: 'Kondisi Rusak (km)', data: badByYear, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: 0.4, fill: true },
-                    { label: 'Total Panjang (km)', data: totalByYear, borderColor: '#1f6366', backgroundColor: 'rgba(31, 99, 102, 0.1)', tension: 0.4, fill: false, borderDash: [5, 5] }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } } },
-                scales: { y: { beginAtZero: true, title: { display: true, text: 'Panjang (km)' } } }
-            }
-        });
-    }
-
-    function updateTable(data) {
-        const thead = document.getElementById('tableHead');
-        const tbody = document.getElementById('tableBody');
-        
-        const displayColumns = ['NAMA RUAS JALAN', 'PANJANG', 'DESA KIRI', 'DESA KANAN', 'BAIK (KM)', 'SEDANG (KM)', 'RUSAK (KM)'];
-        
-        thead.innerHTML = '<tr>' + displayColumns.map(col => `<th>${col}</th>`).join('') + '<th>Status</th></tr>';
-        
-        tbody.innerHTML = '';
-        data.forEach(row => {
-            const total = (row['BAIK (KM)'] || 0) + (row['SEDANG (KM)'] || 0) + (row['RUSAK (KM)'] || 0);
-            let status = 'Sedang', badgeClass = 'badge-moderate';
-            
-            if (total === 0 || ((row['BAIK (KM)'] || 0) / total) > 0.7) {
-                status = 'Baik'; badgeClass = 'badge-good';
-            } else if (((row['RUSAK (KM)'] || 0) / total) > 0.3) {
-                status = 'Rusak'; badgeClass = 'badge-bad';
-            }
-            
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><strong>${row['NAMA RUAS JALAN'] || '-'}</strong></td>
-                <td>${(row['PANJANG'] || 0).toFixed(2)}</td>
-                <td>${row['DESA KIRI'] || '-'}</td>
-                <td>${row['DESA KANAN'] || '-'}</td>
-                <td>${(row['BAIK (KM)'] || 0).toFixed(2)}</td>
-                <td>${(row['SEDANG (KM)'] || 0).toFixed(2)}</td>
-                <td>${(row['RUSAK (KM)'] || 0).toFixed(2)}</td>
-                <td><span class="badge ${badgeClass}">${status}</span></td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function formatKM(value) {
-        return (parseFloat(value) || 0).toFixed(2);
-    }
-    
-    function formatPercent(value) {
-        return Math.round(parseFloat(value) || 0);
-    }
-    
-    function calculatePercent(kmValue, totalPanjang) {
-        if (!totalPanjang || totalPanjang === 0) return 0;
-        return Math.round((kmValue / totalPanjang) * 100);
-    }
-
-    function updateDetailSection(data) {
-        const detailSection = document.getElementById('detailSection');
-        
-        if (selectedRoad && data.length > 0) {
-            detailSection.style.display = 'block';
-            document.getElementById('detailRoadName').textContent = selectedRoad;
-            
-            const currentRow = data[0];
-            const totalPanjang = currentRow['PANJANG'] || 0;
-            
-            const allDataDiv = document.getElementById('roadDetailAll');
-            allDataDiv.innerHTML = '';
-            
-            const displayFields = allHeaders.filter(h => h !== 'TAHUN' && h !== 'SATUAN');
-            
-            displayFields.forEach(header => {
-                if (header && currentRow[header] !== undefined && currentRow[header] !== '') {
-                    const item = document.createElement('div');
-                    item.className = 'detail-item';
-                    
-                    let value = currentRow[header];
-                    let displayValue = value;
-                    let unit = '';
-                    
-                    if (header.includes('(KM)') || header === 'PANJANG') {
-                        displayValue = formatKM(value);
-                        unit = 'km';
-                    } else if (header.includes('(%)')) {
-                        const kmHeader = header.replace('(%)', '(KM)');
-                        const kmValue = currentRow[kmHeader] || 0;
-                        displayValue = calculatePercent(kmValue, totalPanjang);
-                        unit = '%';
-                    }
-                    
-                    item.innerHTML = `
-                        <div class="detail-label">${header}</div>
-                        <div class="detail-value">${displayValue} <span class="detail-unit">${unit}</span></div>
-                    `;
-                    allDataDiv.appendChild(item);
-                }
-            });
-            
-            const conditionDiv = document.getElementById('roadDetailCondition');
-            conditionDiv.innerHTML = '';
-            
-            const conditionGroups = [
-                { label: 'Panjang Total', km: 'PANJANG', percent: null },
-                { label: 'Kondisi Baik', km: 'BAIK (KM)', percent: 'BAIK (%)' },
-                { label: 'Kondisi Sedang', km: 'SEDANG (KM)', percent: 'SEDANG (%)' },
-                { label: 'Kondisi Rusak', km: 'RUSAK (KM)', percent: 'RUSAK (%)' }
-            ];
-            
-            conditionGroups.forEach(group => {
-                const item = document.createElement('div');
-                item.className = 'detail-item';
-                
-                let kmValue = currentRow[group.km] !== undefined ? formatKM(currentRow[group.km]) : '-';
-                let percentValue = group.percent ? calculatePercent(currentRow[group.km] || 0, totalPanjang) : null;
-                
-                let color = 'var(--gray-800)';
-                if (group.label.includes('Baik')) color = 'var(--success)';
-                else if (group.label.includes('Sedang')) color = 'var(--warning)';
-                else if (group.label.includes('Rusak')) color = 'var(--danger)';
-                
-                item.innerHTML = `
-                    <div class="detail-label">${group.label}</div>
-                    <div class="detail-group">
-                        <span class="detail-main" style="color: ${color};">${kmValue} km</span>
-                        ${percentValue !== null ? `<span class="detail-sub">(${percentValue}%)</span>` : ''}
-                    </div>
-                `;
-                conditionDiv.appendChild(item);
-            });
-            
-            const additionalFields = ['DESA KIRI', 'DESA KANAN', 'KECAMATAN'];
-            additionalFields.forEach(field => {
-                if (currentRow[field] !== undefined && currentRow[field] !== '') {
-                    const item = document.createElement('div');
-                    item.className = 'detail-item';
-                    item.innerHTML = `
-                        <div class="detail-label">${field}</div>
-                        <div class="detail-value">${currentRow[field]}</div>
-                    `;
                     conditionDiv.appendChild(item);
-                }
+                });
+                
+                const additionalFields = ['DESA KIRI', 'DESA KANAN', 'KECAMATAN'];
+                additionalFields.forEach(field => {
+                    if (currentRow[field] !== undefined && currentRow[field] !== '') {
+                        const item = document.createElement('div');
+                        item.className = 'detail-item';
+                        item.innerHTML = `
+                            <div class="detail-label">${field}</div>
+                            <div class="detail-value">${currentRow[field]}</div>
+                        `;
+                        conditionDiv.appendChild(item);
+                    }
+                });
+                
+                updateRoadTrendChart(selectedRoad);
+                
+            } else {
+                detailSection.style.display = 'none';
+            }
+        }
+
+        function updateRoadTrendChart(roadName) {
+            const ctx = document.getElementById('roadTrendChart').getContext('2d');
+            const roadHistory = roadData.filter(row => row['NAMA RUAS JALAN'] === roadName);
+            const years = [...new Set(roadHistory.map(row => row['TAHUN']))].sort();
+            
+            const goodByYear = years.map(year => {
+                const row = roadHistory.find(r => r['TAHUN'] === year);
+                return row ? row['BAIK (KM)'] || 0 : 0;
+            });
+            const moderateByYear = years.map(year => {
+                const row = roadHistory.find(r => r['TAHUN'] === year);
+                return row ? row['SEDANG (KM)'] || 0 : 0;
+            });
+            const badByYear = years.map(year => {
+                const row = roadHistory.find(r => r['TAHUN'] === year);
+                return row ? row['RUSAK (KM)'] || 0 : 0;
             });
             
-            updateRoadTrendChart(selectedRoad);
+            if (roadTrendChart) roadTrendChart.destroy();
             
-        } else {
-            detailSection.style.display = 'none';
-        }
-    }
-
-    function updateRoadTrendChart(roadName) {
-        const ctx = document.getElementById('roadTrendChart').getContext('2d');
-        const roadHistory = roadData.filter(row => row['NAMA RUAS JALAN'] === roadName);
-        const years = [...new Set(roadHistory.map(row => row['TAHUN']))].sort();
-        
-        const goodByYear = years.map(year => {
-            const row = roadHistory.find(r => r['TAHUN'] === year);
-            return row ? row['BAIK (KM)'] || 0 : 0;
-        });
-        const moderateByYear = years.map(year => {
-            const row = roadHistory.find(r => r['TAHUN'] === year);
-            return row ? row['SEDANG (KM)'] || 0 : 0;
-        });
-        const badByYear = years.map(year => {
-            const row = roadHistory.find(r => r['TAHUN'] === year);
-            return row ? row['RUSAK (KM)'] || 0 : 0;
-        });
-        
-        if (roadTrendChart) roadTrendChart.destroy();
-        
-        roadTrendChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: years,
-                datasets: [
-                    { label: 'Baik (km)', data: goodByYear, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4, fill: true },
-                    { label: 'Sedang (km)', data: moderateByYear, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4, fill: true },
-                    { label: 'Rusak (km)', data: badByYear, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: 0.4, fill: true }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } },
-                    title: { display: true, text: `Perkembangan Kondisi: ${roadName}`, font: { size: 14 } }
+            roadTrendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: years,
+                    datasets: [
+                        { label: 'Baik (km)', data: goodByYear, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Sedang (km)', data: moderateByYear, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Rusak (km)', data: badByYear, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: 0.4, fill: true }
+                    ]
                 },
-                scales: { y: { beginAtZero: true, title: { display: true, text: 'Panjang (km)' } } }
-            }
-        });
-    }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } },
+                        title: { display: true, text: `Perkembangan Kondisi: ${roadName}`, font: { size: 14 } }
+                    },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Panjang (km)' } } }
+                }
+            });
+        }
 
-    function switchTab(tabName) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-        event.target.classList.add('active');
-        document.getElementById('tab-' + tabName).classList.add('active');
-    }
-</script>
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+    </script>
 </body>
 </html>
