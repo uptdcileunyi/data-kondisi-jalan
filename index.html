@@ -97,6 +97,18 @@
         .detail-label { font-size: 0.75rem; color: var(--gray-600); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600; }
         .detail-value { font-weight: 600; color: var(--gray-800); font-size: 1rem; }
         
+        /* Section Headers untuk Grouping */
+        .detail-section-title {
+            grid-column: 1 / -1;
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-top: 0.5rem;
+            margin-bottom: 0.25rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 2px solid var(--gray-200);
+        }
+        
         /* Tab untuk Detail */
         .tab-container { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid var(--gray-200); }
         .tab-btn { padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; font-weight: 600; color: var(--gray-600); border-bottom: 3px solid transparent; transition: all 0.2s; }
@@ -325,7 +337,7 @@
                                  'RUSAK (KM)', 'RUSAK (%)', 'BERAT (KM)', 'BERAT (%)',
                                  'LASTON (KM)', 'LASTON (%)', 'BIDIRI (KM)', 'BIDIRI (%)',
                                  'TANAH (KM)', 'TANAH (%)', 'BATU (KM)', 'BATU (%)',
-                                 'PENETRASI (KM)', 'PENETRASI (%)'].includes(cleanKey)) {
+                                 'PENETRASI (KM)', 'PENETRASI (%)', 'RINGAN (KM)', 'RINGAN (%)'].includes(cleanKey)) {
                                 value = parseFloat(value) || 0;
                             } else if (cleanKey === 'TAHUN') {
                                 value = parseInt(value) || 2026;
@@ -430,8 +442,10 @@
             
             try {
                 const response = await fetch(GEOJSON_URL);
-                if (!response.ok) throw new Error('Gagal mengambil GeoJSON');
+                if (!response.ok) throw new Error('Gagal mengambil GeoJSON - Status: ' + response.status);
                 const geojson = await response.json();
+                
+                console.log('GeoJSON loaded:', geojson);
                 
                 L.geoJSON(geojson, {
                     style: function(feature) {
@@ -461,8 +475,7 @@
                                 Panjang: <b>${roadDataItem['PANJANG']} km</b><br>
                                 Baik: <span style="color:#10b981;">${roadDataItem['BAIK (KM)']} km</span><br>
                                 Sedang: <span style="color:#f59e0b;">${roadDataItem['SEDANG (KM)']} km</span><br>
-                                Rusak: <span style="color:#ef4444;">${roadDataItem['RUSAK (KM)']} km</span><br>
-                                Tahun: ${roadDataItem['TAHUN']}
+                                Rusak: <span style="color:#ef4444;">${roadDataItem['RUSAK (KM)']} km</span>
                             `);
                         }
                         
@@ -480,7 +493,14 @@
             } catch (error) {
                 console.warn('GeoJSON load error:', error);
                 L.marker([-6.9431, 107.7539]).addTo(map)
-                    .bindPopup('File GeoJSON tidak ditemukan. Periksa URL GitHub Anda.<br><small>' + error.message + '</small>')
+                    .bindPopup(`<strong>File GeoJSON tidak ditemukan</strong><br><br>
+                                Periksa URL GitHub Anda:<br>
+                                <small>${GEOJSON_URL}</small><br><br>
+                                Error: ${error.message}<br><br>
+                                <strong>Pastikan:</strong><br>
+                                1. File ruas_jalan.geojson sudah di-upload ke GitHub<br>
+                                2. URL sudah benar (gunakan tombol "Raw" di GitHub)<br>
+                                3. Repository bersifat Public`)
                     .openPopup();
             }
         }
@@ -611,7 +631,7 @@
             // Buat header tabel dari data yang ada
             const displayColumns = ['NAMA RUAS JALAN', 'PANJANG', 'DESA KIRI', 'DESA KANAN', 'BAIK (KM)', 'SEDANG (KM)', 'RUSAK (KM)', 'TAHUN'];
             
-            thead.innerHTML = '<tr>' + displayColumns.map(col => `<th>${col}</th><th>Status</th>`).join('') + '</tr>';
+            thead.innerHTML = '<tr>' + displayColumns.map(col => `<th>${col}</th>`).join('') + '<th>Status</th></tr>';
             
             tbody.innerHTML = '';
             data.forEach(row => {
@@ -640,6 +660,30 @@
             });
         }
 
+        // Format angka untuk tampilan
+        function formatValue(key, value) {
+            // Skip kolom tertentu
+            if (key === 'TAHUN' || key === 'SATUAN') return null;
+            
+            // Format persentase tanpa desimal
+            if (key.includes('(%)')) {
+                return Math.round(value) + '%';
+            }
+            
+            // Format angka desimal untuk KM
+            if (key.includes('(KM)')) {
+                return value.toFixed(2) + ' km';
+            }
+            
+            // Format PANJANG dengan satuan
+            if (key === 'PANJANG') {
+                return value.toFixed(2) + ' km';
+            }
+            
+            // Untuk teks biasa
+            return value;
+        }
+
         // Detail Section - Tampilkan SEMUA data dari spreadsheet
         function updateDetailSection(data) {
             const detailSection = document.getElementById('detailSection');
@@ -653,43 +697,132 @@
                 allDataDiv.innerHTML = '';
                 
                 const currentRow = data[0];
-                allHeaders.forEach(header => {
-                    if (header && currentRow[header] !== undefined) {
-                        const item = document.createElement('div');
-                        item.className = 'detail-item';
-                        
-                        let displayValue = currentRow[header];
-                        if (typeof displayValue === 'number') {
-                            displayValue = displayValue.toFixed(2);
+                
+                // Kelompokkan data
+                const infoFields = ['NAMA RUAS JALAN', 'PANJANG', 'DESA KIRI', 'DESA KANAN', 'KECAMATAN'];
+                const conditionKmFields = ['BAIK (KM)', 'SEDANG (KM)', 'RUSAK (KM)', 'RINGAN (KM)', 'BERAT (KM)'];
+                const conditionPercentFields = ['BAIK (%)', 'SEDANG (%)', 'RUSAK (%)', 'RINGAN (%)', 'BERAT (%)'];
+                const surfaceFields = ['LASTON (KM)', 'LASTON (%)', 'BIDIRI (KM)', 'BIDIRI (%)', 
+                                       'TANAH (KM)', 'TANAH (%)', 'BATU (KM)', 'BATU (%)',
+                                       'PENETRASI (KM)', 'PENETRASI (%)', 'RIGID (KM)', 'RIGID (%)'];
+                
+                // Section: Informasi Umum
+                const infoTitle = document.createElement('div');
+                infoTitle.className = 'detail-section-title';
+                infoTitle.textContent = 'Informasi Umum';
+                allDataDiv.appendChild(infoTitle);
+                
+                infoFields.forEach(header => {
+                    if (header && currentRow[header] !== undefined && currentRow[header] !== '') {
+                        const formattedValue = formatValue(header, currentRow[header]);
+                        if (formattedValue !== null) {
+                            const item = document.createElement('div');
+                            item.className = 'detail-item';
+                            item.innerHTML = `
+                                <div class="detail-label">${header}</div>
+                                <div class="detail-value">${formattedValue}</div>
+                            `;
+                            allDataDiv.appendChild(item);
                         }
-                        
-                        item.innerHTML = `
-                            <div class="detail-label">${header}</div>
-                            <div class="detail-value">${displayValue}</div>
-                        `;
-                        allDataDiv.appendChild(item);
+                    }
+                });
+                
+                // Section: Kondisi Jalan (KM)
+                const condKmTitle = document.createElement('div');
+                condKmTitle.className = 'detail-section-title';
+                condKmTitle.textContent = 'Kondisi Jalan (Panjang)';
+                allDataDiv.appendChild(condKmTitle);
+                
+                conditionKmFields.forEach(header => {
+                    if (header && currentRow[header] !== undefined) {
+                        const formattedValue = formatValue(header, currentRow[header]);
+                        if (formattedValue !== null && currentRow[header] > 0) {
+                            const item = document.createElement('div');
+                            item.className = 'detail-item';
+                            let color = 'var(--gray-800)';
+                            if (header.includes('BAIK')) color = 'var(--success)';
+                            else if (header.includes('SEDANG') || header.includes('RINGAN')) color = 'var(--warning)';
+                            else if (header.includes('RUSAK') || header.includes('BERAT')) color = 'var(--danger)';
+                            
+                            item.innerHTML = `
+                                <div class="detail-label">${header}</div>
+                                <div class="detail-value" style="color: ${color};">${formattedValue}</div>
+                            `;
+                            allDataDiv.appendChild(item);
+                        }
+                    }
+                });
+                
+                // Section: Kondisi Jalan (%)
+                const condPercentTitle = document.createElement('div');
+                condPercentTitle.className = 'detail-section-title';
+                condPercentTitle.textContent = 'Kondisi Jalan (Persentase)';
+                allDataDiv.appendChild(condPercentTitle);
+                
+                conditionPercentFields.forEach(header => {
+                    if (header && currentRow[header] !== undefined) {
+                        const formattedValue = formatValue(header, currentRow[header]);
+                        if (formattedValue !== null) {
+                            const item = document.createElement('div');
+                            item.className = 'detail-item';
+                            let color = 'var(--gray-800)';
+                            if (header.includes('BAIK')) color = 'var(--success)';
+                            else if (header.includes('SEDANG') || header.includes('RINGAN')) color = 'var(--warning)';
+                            else if (header.includes('RUSAK') || header.includes('BERAT')) color = 'var(--danger)';
+                            
+                            item.innerHTML = `
+                                <div class="detail-label">${header}</div>
+                                <div class="detail-value" style="color: ${color};">${formattedValue}</div>
+                            `;
+                            allDataDiv.appendChild(item);
+                        }
+                    }
+                });
+                
+                // Section: Jenis Perkerasan
+                const surfaceTitle = document.createElement('div');
+                surfaceTitle.className = 'detail-section-title';
+                surfaceTitle.textContent = 'Jenis Perkerasan';
+                allDataDiv.appendChild(surfaceTitle);
+                
+                surfaceFields.forEach(header => {
+                    if (header && currentRow[header] !== undefined) {
+                        const formattedValue = formatValue(header, currentRow[header]);
+                        if (formattedValue !== null && currentRow[header] > 0) {
+                            const item = document.createElement('div');
+                            item.className = 'detail-item';
+                            item.innerHTML = `
+                                <div class="detail-label">${header}</div>
+                                <div class="detail-value">${formattedValue}</div>
+                            `;
+                            allDataDiv.appendChild(item);
+                        }
                     }
                 });
                 
                 // Tab 2: Kondisi Jalan (Highlight)
                 const conditionDiv = document.getElementById('roadDetailCondition');
                 conditionDiv.innerHTML = '';
-                const conditionFields = ['PANJANG', 'BAIK (KM)', 'BAIK (%)', 'SEDANG (KM)', 'SEDANG (%)', 'RUSAK (KM)', 'RUSAK (%)', 'TAHUN'];
+                const conditionFields = ['PANJANG', 'BAIK (KM)', 'BAIK (%)', 'SEDANG (KM)', 'SEDANG (%)', 
+                                         'RUSAK (KM)', 'RUSAK (%)', 'RINGAN (KM)', 'RINGAN (%)', 'BERAT (KM)', 'BERAT (%)'];
                 
                 conditionFields.forEach(field => {
                     if (currentRow[field] !== undefined) {
-                        const item = document.createElement('div');
-                        item.className = 'detail-item';
-                        let color = 'var(--gray-800)';
-                        if (field.includes('BAIK')) color = 'var(--success)';
-                        else if (field.includes('SEDANG')) color = 'var(--warning)';
-                        else if (field.includes('RUSAK')) color = 'var(--danger)';
-                        
-                        item.innerHTML = `
-                            <div class="detail-label">${field}</div>
-                            <div class="detail-value" style="color: ${color};">${typeof currentRow[field] === 'number' ? currentRow[field].toFixed(2) : currentRow[field]}</div>
-                        `;
-                        conditionDiv.appendChild(item);
+                        const formattedValue = formatValue(field, currentRow[field]);
+                        if (formattedValue !== null) {
+                            const item = document.createElement('div');
+                            item.className = 'detail-item';
+                            let color = 'var(--gray-800)';
+                            if (field.includes('BAIK')) color = 'var(--success)';
+                            else if (field.includes('SEDANG') || field.includes('RINGAN')) color = 'var(--warning)';
+                            else if (field.includes('RUSAK') || field.includes('BERAT')) color = 'var(--danger)';
+                            
+                            item.innerHTML = `
+                                <div class="detail-label">${field}</div>
+                                <div class="detail-value" style="color: ${color};">${formattedValue}</div>
+                            `;
+                            conditionDiv.appendChild(item);
+                        }
                     }
                 });
                 
