@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Kondisi Jalan Kecamatan Cileunyi</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #1f6366;
+            --primary-dark: #154a4c;
+            --primary-light: #2a8a8e;
+            --secondary: #f0f9f9;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-600: #4b5563;
+            --gray-800: #1f2937;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--gray-50); color: var(--gray-800); }
+        
+        .header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 1.5rem 2rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 0.75rem; }
+        .header-info { font-size: 0.875rem; opacity: 0.9; }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        
+        .filter-section { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 1rem; flex-wrap: wrap; align-items: end; }
+        .filter-group { flex: 1; min-width: 250px; }
+        .filter-group label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--gray-600); font-size: 0.875rem; }
+        .filter-group select { width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--gray-200); border-radius: 8px; font-size: 0.95rem; transition: all 0.2s; font-family: inherit; background: white; }
+        .filter-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(31, 99, 102, 0.1); }
+        
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 6px rgba(31, 99, 102, 0.3); }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .stat-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid var(--primary); transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .stat-card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; }
+        .stat-card-title { font-size: 0.875rem; color: var(--gray-600); font-weight: 500; }
+        .stat-card-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background-color: var(--secondary); color: var(--primary); }
+        .stat-card-value { font-size: 1.75rem; font-weight: 700; color: var(--gray-800); margin-bottom: 0.25rem; }
+        .stat-card-change { font-size: 0.875rem; color: var(--success); font-weight: 500; }
+        
+        .main-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 2rem; margin-bottom: 2rem; }
+        @media (max-width: 1024px) { .main-grid { grid-template-columns: 1fr; } }
+        
+        .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        .card-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 1.125rem; font-weight: 600; color: var(--gray-800); }
+        .card-body { padding: 1.5rem; }
+        
+        #map { height: 450px; border-radius: 8px; z-index: 1; }
+        .map-legend { background: white; padding: 1rem; border-radius: 8px; margin-top: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .legend-item { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.875rem; }
+        .legend-color { width: 20px; height: 4px; border-radius: 2px; }
+        
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.875rem 1rem; text-align: left; border-bottom: 1px solid var(--gray-200); }
+        th { background-color: var(--gray-50); font-weight: 600; color: var(--gray-600); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        tr:hover { background-color: var(--gray-50); }
+        
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+        .badge-good { background-color: #d1fae5; color: #065f46; }
+        .badge-moderate { background-color: #fef3c7; color: #92400e; }
+        .badge-bad { background-color: #fee2e2; color: #991b1b; }
+        
+        .chart-container { position: relative; height: 300px; }
+        
+        .loading { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 4rem; gap: 1rem; }
+        .spinner { width: 40px; height: 40px; border: 4px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .error-msg { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; text-align: center; margin: 2rem 0; border: 1px solid #fecaca; }
+        
+        .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1rem; }
+        .detail-item { padding: 1rem; background-color: var(--gray-50); border-radius: 8px; }
+        .detail-label { font-size: 0.75rem; color: var(--gray-600); margin-bottom: 0.25rem; }
+        .detail-value { font-weight: 600; color: var(--gray-800); }
+        
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .header-content { flex-direction: column; text-align: center; gap: 1rem; }
+            .filter-section { flex-direction: column; }
+            .filter-group { width: 100%; }
+            .detail-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <h1><i class="fas fa-road"></i> Dashboard Kondisi Jalan</h1>
+            <div class="header-info">Kecamatan Cileunyi | Tahun <span id="currentYear">2026</span></div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="filter-section">
+            <div class="filter-group">
+                <label for="roadFilter"><i class="fas fa-road"></i> Nama Ruas Jalan</label>
+                <select id="roadFilter"><option value="">Semua Ruas Jalan</option></select>
+            </div>
+            <div class="filter-group">
+                <label for="yearFilter"><i class="fas fa-calendar"></i> Tahun</label>
+                <select id="yearFilter"><option value="">Semua Tahun</option></select>
+            </div>
+            <button class="btn btn-primary" onclick="applyFilter()">
+                <i class="fas fa-filter"></i> Terapkan Filter
+            </button>
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Memuat data dari server...</p>
+        </div>
+
+        <div id="errorMsg" class="error-msg" style="display: none;"></div>
+
+        <div id="content" style="display: none;">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <div>
+                            <div class="stat-card-title">Total Panjang Jalan</div>
+                            <div class="stat-card-value" id="totalLength">0 km</div>
+                        </div>
+                        <div class="stat-card-icon"><i class="fas fa-ruler-horizontal"></i></div>
+                    </div>
+                </div>
+                <div class="stat-card" style="border-left-color: var(--success);">
+                    <div class="stat-card-header">
+                        <div>
+                            <div class="stat-card-title">Kondisi Baik</div>
+                            <div class="stat-card-value" id="goodCondition">0 km</div>
+                            <div class="stat-card-change" id="goodPercent">0%</div>
+                        </div>
+                        <div class="stat-card-icon" style="background-color: #d1fae5; color: var(--success);"><i class="fas fa-check-circle"></i></div>
+                    </div>
+                </div>
+                <div class="stat-card" style="border-left-color: var(--warning);">
+                    <div class="stat-card-header">
+                        <div>
+                            <div class="stat-card-title">Kondisi Sedang</div>
+                            <div class="stat-card-value" id="moderateCondition">0 km</div>
+                            <div class="stat-card-change" id="moderatePercent" style="color: var(--warning);">0%</div>
+                        </div>
+                        <div class="stat-card-icon" style="background-color: #fef3c7; color: var(--warning);"><i class="fas fa-exclamation-triangle"></i></div>
+                    </div>
+                </div>
+                <div class="stat-card" style="border-left-color: var(--danger);">
+                    <div class="stat-card-header">
+                        <div>
+                            <div class="stat-card-title">Kondisi Rusak</div>
+                            <div class="stat-card-value" id="badCondition">0 km</div>
+                            <div class="stat-card-change" id="badPercent" style="color: var(--danger);">0%</div>
+                        </div>
+                        <div class="stat-card-icon" style="background-color: #fee2e2; color: var(--danger);"><i class="fas fa-times-circle"></i></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="fas fa-map-marked-alt"></i> Peta Ruas Jalan</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="map"></div>
+                        <div class="map-legend">
+                            <div class="legend-item"><div class="legend-color" style="background-color: var(--success);"></div><span>Kondisi Baik (>70%)</span></div>
+                            <div class="legend-item"><div class="legend-color" style="background-color: var(--warning);"></div><span>Kondisi Sedang</span></div>
+                            <div class="legend-item"><div class="legend-color" style="background-color: var(--danger);"></div><span>Kondisi Rusak (>30%)</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="fas fa-chart-pie"></i> Distribusi Kondisi</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="conditionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="detailSection" style="display: none;">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-info-circle"></i> Detail Ruas Jalan Terpilih</h3>
+                </div>
+                <div class="card-body">
+                    <div id="roadDetail"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-table"></i> Data Kondisi Jalan</h3>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table id="dataTable">
+                            <thead>
+                                <tr>
+                                    <th>Nama Ruas Jalan</th>
+                                    <th>Panjang (km)</th>
+                                    <th>Desa</th>
+                                    <th>Baik (km)</th>
+                                    <th>Sedang (km)</th>
+                                    <th>Rusak (km)</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // ==========================================
+        // KONFIGURASI URL (WAJIB DIISI)
+        // ==========================================
+        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzjTyqWxOiKWhnTGC4p4dxTzaiNUsKPq1K76shnQGozd0_2fmT1VtZZZIDEUHjia0uJ/exec';
+        const GEOJSON_URL = 'https://raw.githubusercontent.com/USERNAME/REPOSITORY_NAME/main/ruas_jalan.geojson';
+        // ==========================================
+
+        let map, conditionChart, roadData = [], selectedRoad = null, selectedYear = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            loadData();
+        });
+
+        function initializeMap() {
+            map = L.map('map').setView([-6.9431, 107.7539], 13);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(map);
+        }
+
+        async function loadData() {
+            try {
+                const response = await fetch(GAS_API_URL);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    // Normalisasi data untuk memastikan tipe data angka
+                    roadData = result.data.map(row => ({
+                        "NAMA RUAS JALAN": String(row['NAMA RUAS JALAN'] || '').trim(),
+                        "PANJANG": parseFloat(row['PANJANG']) || 0,
+                        "DESA KIRI": String(row['DESA KIRI'] || '').trim(),
+                        "DESA KANAN": String(row['DESA KANAN'] || '').trim(),
+                        "KECAMATAN": String(row['KECAMATAN'] || 'Cileunyi').trim(),
+                        "BAIK (KM)": parseFloat(row['BAIK (KM)']) || 0,
+                        "BAIK (%)": parseFloat(row['BAIK (%)']) || 0,
+                        "SEDANG (KM)": parseFloat(row['SEDANG (KM)']) || 0,
+                        "SEDANG (%)": parseFloat(row['SEDANG (%)']) || 0,
+                        "RUSAK (KM)": parseFloat(row['RUSAK (KM)']) || 0,
+                        "RUSAK (%)": parseFloat(row['RUSAK (%)']) || 0,
+                        "TAHUN": parseInt(row['TAHUN']) || 2026
+                    })).filter(row => row['NAMA RUAS JALAN'] !== '');
+
+                    console.log(`Berhasil memuat ${roadData.length} data ruas jalan`);
+                    populateFilters();
+                    applyFilter();
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                } else {
+                    throw new Error(result.error || 'Data kosong');
+                }
+            } catch (error) {
+                console.error("Gagal memuat data:", error);
+                document.getElementById('loading').style.display = 'none';
+                const errDiv = document.getElementById('errorMsg');
+                errDiv.innerHTML = `<strong>Gagal memuat data!</strong><br>Pastikan: 1) URL Apps Script sudah benar, 2) Deployment diatur "Anyone", 3) Sheet bernama "ADMINISTRASI".<br><small>Error: ${error.message}</small>`;
+                errDiv.style.display = 'block';
+            }
+        }
+
+        function populateFilters() {
+            const roadFilter = document.getElementById('roadFilter');
+            const yearFilter = document.getElementById('yearFilter');
+            
+            const roads = [...new Set(roadData.map(row => row['NAMA RUAS JALAN']))].sort();
+            roads.forEach(road => {
+                const option = document.createElement('option');
+                option.value = road;
+                option.textContent = road;
+                roadFilter.appendChild(option);
+            });
+            
+            const years = [...new Set(roadData.map(row => row['TAHUN']))].sort().reverse();
+            years.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearFilter.appendChild(option);
+            });
+            
+            if (years.length > 0) {
+                document.getElementById('currentYear').textContent = years[0];
+            }
+        }
+
+        function applyFilter() {
+            selectedRoad = document.getElementById('roadFilter').value;
+            selectedYear = document.getElementById('yearFilter').value;
+            
+            let filteredData = roadData;
+            if (selectedRoad) filteredData = filteredData.filter(row => row['NAMA RUAS JALAN'] === selectedRoad);
+            if (selectedYear) filteredData = filteredData.filter(row => row['TAHUN'] == selectedYear);
+            
+            updateDashboard(filteredData);
+        }
+
+        function updateDashboard(data) {
+            updateStats(data);
+            updateMap(data);
+            updateChart(data);
+            updateTable(data);
+            updateDetailSection(data);
+        }
+
+        function updateStats(data) {
+            let totalLength = 0, goodLength = 0, moderateLength = 0, badLength = 0;
+            data.forEach(row => {
+                totalLength += row['PANJANG'];
+                goodLength += row['BAIK (KM)'];
+                moderateLength += row['SEDANG (KM)'];
+                badLength += row['RUSAK (KM)'];
+            });
+            
+            document.getElementById('totalLength').textContent = totalLength.toFixed(2) + ' km';
+            document.getElementById('goodCondition').textContent = goodLength.toFixed(2) + ' km';
+            document.getElementById('moderateCondition').textContent = moderateLength.toFixed(2) + ' km';
+            document.getElementById('badCondition').textContent = badLength.toFixed(2) + ' km';
+            
+            if (totalLength > 0) {
+                document.getElementById('goodPercent').textContent = ((goodLength / totalLength) * 100).toFixed(1) + '%';
+                document.getElementById('moderatePercent').textContent = ((moderateLength / totalLength) * 100).toFixed(1) + '%';
+                document.getElementById('badPercent').textContent = ((badLength / totalLength) * 100).toFixed(1) + '%';
+            }
+        }
+
+        async function updateMap(data) {
+            map.eachLayer((layer) => {
+                if (layer instanceof L.GeoJSON) map.removeLayer(layer);
+            });
+            
+            try {
+                const response = await fetch(GEOJSON_URL);
+                if (!response.ok) throw new Error('Gagal mengambil GeoJSON');
+                const geojson = await response.json();
+                
+                L.geoJSON(geojson, {
+                    style: function(feature) {
+                        // Sesuaikan 'name' atau 'NAMA' dengan property di file geojson Anda
+                        const roadName = feature.properties.name || feature.properties.NAMA || feature.properties.NAMA_RUAS_JALAN || '';
+                        const roadDataItem = data.find(row => row['NAMA RUAS JALAN'] === roadName);
+                        
+                        if (roadDataItem) {
+                            const total = roadDataItem['BAIK (KM)'] + roadDataItem['SEDANG (KM)'] + roadDataItem['RUSAK (KM)'];
+                            if (total === 0 || (roadDataItem['BAIK (KM)'] / total) > 0.7) {
+                                return { color: '#10b981', weight: 4, opacity: 0.8 };
+                            } else if ((roadDataItem['RUSAK (KM)'] / total) > 0.3) {
+                                return { color: '#ef4444', weight: 4, opacity: 0.8 };
+                            } else {
+                                return { color: '#f59e0b', weight: 4, opacity: 0.8 };
+                            }
+                        }
+                        return { color: '#1f6366', weight: 2, opacity: 0.5 };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const roadName = feature.properties.name || feature.properties.NAMA || feature.properties.NAMA_RUAS_JALAN || 'Tidak Diketahui';
+                        const roadDataItem = data.find(row => row['NAMA RUAS JALAN'] === roadName);
+                        
+                        if (roadDataItem) {
+                            layer.bindPopup(`
+                                <strong style="font-size:14px; color:#1f6366;">${roadName}</strong><br>
+                                <hr style="margin:8px 0; border:0; border-top:1px solid #eee;">
+                                Panjang: <b>${roadDataItem['PANJANG']} km</b><br>
+                                Baik: <span style="color:#10b981;">${roadDataItem['BAIK (KM)']} km</span><br>
+                                Sedang: <span style="color:#f59e0b;">${roadDataItem['SEDANG (KM)']} km</span><br>
+                                Rusak: <span style="color:#ef4444;">${roadDataItem['RUSAK (KM)']} km</span>
+                            `);
+                        }
+                        
+                        layer.on('click', function() {
+                            document.getElementById('roadFilter').value = roadName;
+                            applyFilter();
+                        });
+                    }
+                }).addTo(map);
+                
+                // Fit bounds jika ada data
+                const geoLayer = L.geoJSON(geojson);
+                if (geoLayer.getLayers().length > 0) {
+                    map.fitBounds(geoLayer.getBounds(), { padding: [50, 50] });
+                }
+            } catch (error) {
+                console.warn('GeoJSON load error:', error);
+                L.marker([-6.9431, 107.7539]).addTo(map)
+                    .bindPopup('File GeoJSON tidak ditemukan. Periksa URL GitHub Anda.')
+                    .openPopup();
+            }
+        }
+
+        function updateChart(data) {
+            const ctx = document.getElementById('conditionChart').getContext('2d');
+            let goodLength = 0, moderateLength = 0, badLength = 0;
+            
+            data.forEach(row => {
+                goodLength += row['BAIK (KM)'];
+                moderateLength += row['SEDANG (KM)'];
+                badLength += row['RUSAK (KM)'];
+            });
+            
+            if (conditionChart) conditionChart.destroy();
+            
+            conditionChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Baik', 'Sedang', 'Rusak'],
+                    datasets: [{
+                        data: [goodLength, moderateLength, badLength],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } }
+                    }
+                }
+            });
+        }
+
+        function updateTable(data) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            data.forEach(row => {
+                const total = row['BAIK (KM)'] + row['SEDANG (KM)'] + row['RUSAK (KM)'];
+                let status = 'Sedang', badgeClass = 'badge-moderate';
+                
+                if (total === 0 || (row['BAIK (KM)'] / total) > 0.7) {
+                    status = 'Baik'; badgeClass = 'badge-good';
+                } else if ((row['RUSAK (KM)'] / total) > 0.3) {
+                    status = 'Rusak'; badgeClass = 'badge-bad';
+                }
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${row['NAMA RUAS JALAN']}</strong></td>
+                    <td>${row['PANJANG'].toFixed(2)}</td>
+                    <td>${row['DESA KIRI']} / ${row['DESA KANAN']}</td>
+                    <td>${row['BAIK (KM)'].toFixed(2)}</td>
+                    <td>${row['SEDANG (KM)'].toFixed(2)}</td>
+                    <td>${row['RUSAK (KM)'].toFixed(2)}</td>
+                    <td><span class="badge ${badgeClass}">${status}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateDetailSection(data) {
+            const detailSection = document.getElementById('detailSection');
+            const roadDetail = document.getElementById('roadDetail');
+            
+            if (selectedRoad && data.length > 0) {
+                const row = data[0];
+                detailSection.style.display = 'block';
+                roadDetail.innerHTML = `
+                    <h4 style="margin-bottom: 1rem; color: var(--primary); font-size: 1.25rem;">${selectedRoad}</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item"><div class="detail-label">Panjang Total</div><div class="detail-value">${row['PANJANG']} km</div></div>
+                        <div class="detail-item"><div class="detail-label">Kecamatan</div><div class="detail-value">${row['KECAMATAN']}</div></div>
+                        <div class="detail-item"><div class="detail-label">Desa (Kiri)</div><div class="detail-value">${row['DESA KIRI']}</div></div>
+                        <div class="detail-item"><div class="detail-label">Desa (Kanan)</div><div class="detail-value">${row['DESA KANAN']}</div></div>
+                        <div class="detail-item"><div class="detail-label">Kondisi Baik</div><div class="detail-value" style="color: var(--success);">${row['BAIK (KM)']} km (${row['BAIK (%)']}%)</div></div>
+                        <div class="detail-item"><div class="detail-label">Kondisi Sedang</div><div class="detail-value" style="color: var(--warning);">${row['SEDANG (KM)']} km (${row['SEDANG (%)']}%)</div></div>
+                        <div class="detail-item"><div class="detail-label">Kondisi Rusak</div><div class="detail-value" style="color: var(--danger);">${row['RUSAK (KM)']} km (${row['RUSAK (%)']}%)</div></div>
+                        <div class="detail-item"><div class="detail-label">Tahun Data</div><div class="detail-value">${row['TAHUN']}</div></div>
+                    </div>
+                `;
+            } else {
+                detailSection.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
