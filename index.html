@@ -5,13 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Kondisi Jalan Kecamatan Cileunyi</title>
     
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
@@ -91,19 +87,16 @@
         
         .error-msg { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; text-align: center; margin: 2rem 0; border: 1px solid #fecaca; }
         
-        /* Detail Grid - Format Ringkas */
         .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1rem; }
         .detail-item { padding: 1rem; background-color: var(--gray-50); border-radius: 8px; border-left: 3px solid var(--primary); }
         .detail-label { font-size: 0.75rem; color: var(--gray-600); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600; }
         .detail-value { font-weight: 600; color: var(--gray-800); font-size: 1.1rem; }
         .detail-unit { font-size: 0.85rem; color: var(--gray-600); font-weight: 400; }
         
-        /* Group untuk KM dan % */
         .detail-group { display: flex; gap: 0.5rem; align-items: baseline; }
         .detail-main { font-size: 1.2rem; font-weight: 700; }
         .detail-sub { font-size: 0.9rem; color: var(--gray-600); }
         
-        /* Tab untuk Detail */
         .tab-container { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid var(--gray-200); }
         .tab-btn { padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; font-weight: 600; color: var(--gray-600); border-bottom: 3px solid transparent; transition: all 0.2s; }
         .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -150,7 +143,6 @@
         <div id="errorMsg" class="error-msg" style="display: none;"></div>
 
         <div id="content" style="display: none;">
-            <!-- Stats Cards -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-card-header">
@@ -193,7 +185,6 @@
                 </div>
             </div>
 
-            <!-- Peta & Chart Distribusi -->
             <div class="main-grid">
                 <div class="card">
                     <div class="card-header">
@@ -221,7 +212,6 @@
                 </div>
             </div>
 
-            <!-- Grafik Perkembangan Tahunan -->
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title"><i class="fas fa-chart-line"></i> Grafik Perkembangan Kondisi Jalan per Tahun</h3>
@@ -233,7 +223,6 @@
                 </div>
             </div>
 
-            <!-- Detail Ruas Jalan (Dinamis - Semua Kolom) -->
             <div class="card" id="detailSection" style="display: none;">
                 <div class="card-header">
                     <h3 class="card-title"><i class="fas fa-info-circle"></i> Detail Ruas Jalan: <span id="detailRoadName">-</span></h3>
@@ -261,7 +250,6 @@
                 </div>
             </div>
 
-            <!-- Tabel Data -->
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title"><i class="fas fa-table"></i> Data Kondisi Jalan</h3>
@@ -278,16 +266,11 @@
         </div>
     </div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
-        // ==========================================
-        // KONFIGURASI URL - GANTI DENGAN URL ANDA
-        // ==========================================
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzjTyqWxOiKWhnTGC4p4dxTzaiNUsKPq1K76shnQGozd0_2fmT1VtZZZIDEUHjia0uJ/exec';
         const GEOJSON_URL = 'https://raw.githubusercontent.com/uptdcileunyi/data-kondisi-jalan/refs/heads/main/ruas_jalan.geojson';
-        // ==========================================
 
         let map, conditionChart, trendChart, roadTrendChart;
         let roadData = [], selectedRoad = null, selectedYear = null;
@@ -300,8 +283,6 @@
 
         function initializeMap() {
             map = L.map('map').setView([-6.9431, 107.7539], 13);
-            
-            // Gunakan OpenStreetMap langsung (GRATIS, tanpa API key)
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 19
@@ -329,7 +310,7 @@
                                  'LASTON (KM)', 'LASTON (%)', 'BIDIRI (KM)', 'BIDIRI (%)',
                                  'TANAH (KM)', 'TANAH (%)', 'BATU (KM)', 'BATU (%)',
                                  'PENETRASI (KM)', 'PENETRASI (%)', 'RINGAN (KM)', 'RINGAN (%)',
-                                 'RIGID (KM)', 'RIGID (%)', 'SATUAN'].includes(cleanKey)) {
+                                 'RIGID (KM)', 'RIGID (%)'].includes(cleanKey)) {
                                 value = parseFloat(value) || 0;
                             } else if (cleanKey === 'TAHUN') {
                                 value = parseInt(value) || 2026;
@@ -434,11 +415,8 @@
             try {
                 console.log('Mengambil GeoJSON dari:', GEOJSON_URL);
                 const response = await fetch(GEOJSON_URL);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 const geojson = await response.json();
-                console.log('GeoJSON berhasil dimuat:', geojson);
                 
                 if (!geojson.features || geojson.features.length === 0) {
                     throw new Error('GeoJSON tidak memiliki features');
@@ -489,18 +467,8 @@
                 }
             } catch (error) {
                 console.error('GeoJSON load error:', error);
-                // Tampilkan marker dengan pesan error yang lebih informatif
-                const errorMsg = `
-                    <strong>GeoJSON Tidak Ditemukan</strong><br>
-                    URL: ${GEOJSON_URL}<br>
-                    Error: ${error.message}<br><br>
-                    <small>Pastikan:</small><br>
-                    <small>1. File ruas_jalan.geojson sudah di-upload ke GitHub</small><br>
-                    <small>2. URL sudah benar (cek di browser)</small><br>
-                    <small>3. Repository bersifat Public</small>
-                `;
                 L.marker([-6.9431, 107.7539]).addTo(map)
-                    .bindPopup(errorMsg)
+                    .bindPopup(`<strong>GeoJSON Tidak Ditemukan</strong><br><small>${error.message}</small>`)
                     .openPopup();
             }
         }
@@ -571,53 +539,17 @@
                 data: {
                     labels: years,
                     datasets: [
-                        {
-                            label: 'Kondisi Baik (km)',
-                            data: goodByYear,
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Kondisi Sedang (km)',
-                            data: moderateByYear,
-                            borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Kondisi Rusak (km)',
-                            data: badByYear,
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Total Panjang (km)',
-                            data: totalByYear,
-                            borderColor: '#1f6366',
-                            backgroundColor: 'rgba(31, 99, 102, 0.1)',
-                            tension: 0.4,
-                            fill: false,
-                            borderDash: [5, 5]
-                        }
+                        { label: 'Kondisi Baik (km)', data: goodByYear, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Kondisi Sedang (km)', data: moderateByYear, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Kondisi Rusak (km)', data: badByYear, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Total Panjang (km)', data: totalByYear, borderColor: '#1f6366', backgroundColor: 'rgba(31, 99, 102, 0.1)', tension: 0.4, fill: false, borderDash: [5, 5] }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Panjang (km)' }
-                        }
-                    }
+                    plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } } },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Panjang (km)' } } }
                 }
             });
         }
@@ -656,7 +588,6 @@
             });
         }
 
-        // Format helper untuk angka
         function formatKM(value) {
             return (parseFloat(value) || 0).toFixed(2);
         }
@@ -664,8 +595,13 @@
         function formatPercent(value) {
             return Math.round(parseFloat(value) || 0);
         }
+        
+        // Fungsi untuk menghitung persentase dari nilai KM
+        function calculatePercent(kmValue, totalPanjang) {
+            if (!totalPanjang || totalPanjang === 0) return 0;
+            return Math.round((kmValue / totalPanjang) * 100);
+        }
 
-        // Detail Section - Format Ringkas
         function updateDetailSection(data) {
             const detailSection = document.getElementById('detailSection');
             
@@ -674,13 +610,13 @@
                 document.getElementById('detailRoadName').textContent = selectedRoad;
                 
                 const currentRow = data[0];
+                const totalPanjang = currentRow['PANJANG'] || 0;
                 
-                // Tab 1: Semua Data (Format Ringkas - TANPA TAHUN)
+                // Tab 1: Semua Data (TANPA TAHUN dan TANPA SATUAN)
                 const allDataDiv = document.getElementById('roadDetailAll');
                 allDataDiv.innerHTML = '';
                 
-                // Kolom yang ingin ditampilkan (KECUALI TAHUN)
-                const displayFields = allHeaders.filter(h => h !== 'TAHUN');
+                const displayFields = allHeaders.filter(h => h !== 'TAHUN' && h !== 'SATUAN');
                 
                 displayFields.forEach(header => {
                     if (header && currentRow[header] !== undefined && currentRow[header] !== '') {
@@ -691,12 +627,14 @@
                         let displayValue = value;
                         let unit = '';
                         
-                        // Format berdasarkan tipe kolom
                         if (header.includes('(KM)') || header === 'PANJANG') {
                             displayValue = formatKM(value);
                             unit = 'km';
                         } else if (header.includes('(%)')) {
-                            displayValue = formatPercent(value);
+                            // HITUNG ULANG persentase dari nilai KM
+                            const kmHeader = header.replace('(%)', '(KM)');
+                            const kmValue = currentRow[kmHeader] || 0;
+                            displayValue = calculatePercent(kmValue, totalPanjang);
                             unit = '%';
                         }
                         
@@ -708,7 +646,7 @@
                     }
                 });
                 
-                // Tab 2: Kondisi Jalan (Highlight)
+                // Tab 2: Kondisi Jalan
                 const conditionDiv = document.getElementById('roadDetailCondition');
                 conditionDiv.innerHTML = '';
                 
@@ -724,7 +662,7 @@
                     item.className = 'detail-item';
                     
                     let kmValue = currentRow[group.km] !== undefined ? formatKM(currentRow[group.km]) : '-';
-                    let percentValue = group.percent && currentRow[group.percent] !== undefined ? formatPercent(currentRow[group.percent]) : null;
+                    let percentValue = group.percent ? calculatePercent(currentRow[group.km] || 0, totalPanjang) : null;
                     
                     let color = 'var(--gray-800)';
                     if (group.label.includes('Baik')) color = 'var(--success)';
@@ -741,8 +679,7 @@
                     conditionDiv.appendChild(item);
                 });
                 
-                // Tambah info tambahan
-                const additionalFields = ['DESA KIRI', 'DESA KANAN', 'KECAMATAN', 'SATUAN'];
+                const additionalFields = ['DESA KIRI', 'DESA KANAN', 'KECAMATAN'];
                 additionalFields.forEach(field => {
                     if (currentRow[field] !== undefined && currentRow[field] !== '') {
                         const item = document.createElement('div');
@@ -755,7 +692,6 @@
                     }
                 });
                 
-                // Tab 3: Tren per Tahun untuk ruas jalan ini
                 updateRoadTrendChart(selectedRoad);
                 
             } else {
@@ -788,30 +724,9 @@
                 data: {
                     labels: years,
                     datasets: [
-                        {
-                            label: 'Baik (km)',
-                            data: goodByYear,
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Sedang (km)',
-                            data: moderateByYear,
-                            borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Rusak (km)',
-                            data: badByYear,
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        }
+                        { label: 'Baik (km)', data: goodByYear, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Sedang (km)', data: moderateByYear, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4, fill: true },
+                        { label: 'Rusak (km)', data: badByYear, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: 0.4, fill: true }
                     ]
                 },
                 options: {
@@ -821,9 +736,7 @@
                         legend: { position: 'bottom', labels: { padding: 15, font: { family: 'Inter', size: 12 } } },
                         title: { display: true, text: `Perkembangan Kondisi: ${roadName}`, font: { size: 14 } }
                     },
-                    scales: {
-                        y: { beginAtZero: true, title: { display: true, text: 'Panjang (km)' } }
-                    }
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Panjang (km)' } } }
                 }
             });
         }
@@ -831,7 +744,6 @@
         function switchTab(tabName) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
             event.target.classList.add('active');
             document.getElementById('tab-' + tabName).classList.add('active');
         }
