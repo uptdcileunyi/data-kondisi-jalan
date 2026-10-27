@@ -91,23 +91,17 @@
         
         .error-msg { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; text-align: center; margin: 2rem 0; border: 1px solid #fecaca; }
         
-        /* Detail Grid - Dinamis */
-        .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        /* Detail Grid - Format Ringkas */
+        .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1rem; }
         .detail-item { padding: 1rem; background-color: var(--gray-50); border-radius: 8px; border-left: 3px solid var(--primary); }
         .detail-label { font-size: 0.75rem; color: var(--gray-600); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600; }
-        .detail-value { font-weight: 600; color: var(--gray-800); font-size: 1rem; }
+        .detail-value { font-weight: 600; color: var(--gray-800); font-size: 1.1rem; }
+        .detail-unit { font-size: 0.85rem; color: var(--gray-600); font-weight: 400; }
         
-        /* Section Headers untuk Grouping */
-        .detail-section-title {
-            grid-column: 1 / -1;
-            font-size: 0.875rem;
-            font-weight: 700;
-            color: var(--primary);
-            margin-top: 0.5rem;
-            margin-bottom: 0.25rem;
-            padding-bottom: 0.25rem;
-            border-bottom: 2px solid var(--gray-200);
-        }
+        /* Group untuk KM dan % */
+        .detail-group { display: flex; gap: 0.5rem; align-items: baseline; }
+        .detail-main { font-size: 1.2rem; font-weight: 700; }
+        .detail-sub { font-size: 0.9rem; color: var(--gray-600); }
         
         /* Tab untuk Detail */
         .tab-container { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid var(--gray-200); }
@@ -297,7 +291,7 @@
 
         let map, conditionChart, trendChart, roadTrendChart;
         let roadData = [], selectedRoad = null, selectedYear = null;
-        let allHeaders = []; // Simpan semua header dari spreadsheet
+        let allHeaders = [];
 
         document.addEventListener('DOMContentLoaded', function() {
             initializeMap();
@@ -322,22 +316,20 @@
                 const result = await response.json();
                 
                 if (result.success && result.data.length > 0) {
-                    // Simpan semua header dari data pertama
                     allHeaders = Object.keys(result.data[0]);
                     
-                    // Normalisasi data
                     roadData = result.data.map(row => {
                         const normalized = {};
                         for (let key in row) {
                             const cleanKey = key.toString().trim();
                             let value = row[key];
                             
-                            // Konversi angka
                             if (['PANJANG', 'BAIK (KM)', 'BAIK (%)', 'SEDANG (KM)', 'SEDANG (%)', 
                                  'RUSAK (KM)', 'RUSAK (%)', 'BERAT (KM)', 'BERAT (%)',
                                  'LASTON (KM)', 'LASTON (%)', 'BIDIRI (KM)', 'BIDIRI (%)',
                                  'TANAH (KM)', 'TANAH (%)', 'BATU (KM)', 'BATU (%)',
-                                 'PENETRASI (KM)', 'PENETRASI (%)', 'RINGAN (KM)', 'RINGAN (%)'].includes(cleanKey)) {
+                                 'PENETRASI (KM)', 'PENETRASI (%)', 'RINGAN (KM)', 'RINGAN (%)',
+                                 'RIGID (KM)', 'RIGID (%)', 'SATUAN'].includes(cleanKey)) {
                                 value = parseFloat(value) || 0;
                             } else if (cleanKey === 'TAHUN') {
                                 value = parseInt(value) || 2026;
@@ -351,11 +343,10 @@
                     }).filter(row => row['NAMA RUAS JALAN'] && row['NAMA RUAS JALAN'] !== '');
 
                     console.log(`Berhasil memuat ${roadData.length} data ruas jalan`);
-                    console.log('Headers:', allHeaders);
                     
                     populateFilters();
                     applyFilter();
-                    updateTrendChart(); // Update grafik tren tahunan
+                    updateTrendChart();
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('content').style.display = 'block';
                 } else {
@@ -429,9 +420,9 @@
             document.getElementById('badCondition').textContent = badLength.toFixed(2) + ' km';
             
             if (totalLength > 0) {
-                document.getElementById('goodPercent').textContent = ((goodLength / totalLength) * 100).toFixed(1) + '%';
-                document.getElementById('moderatePercent').textContent = ((moderateLength / totalLength) * 100).toFixed(1) + '%';
-                document.getElementById('badPercent').textContent = ((badLength / totalLength) * 100).toFixed(1) + '%';
+                document.getElementById('goodPercent').textContent = Math.round((goodLength / totalLength) * 100) + '%';
+                document.getElementById('moderatePercent').textContent = Math.round((moderateLength / totalLength) * 100) + '%';
+                document.getElementById('badPercent').textContent = Math.round((badLength / totalLength) * 100) + '%';
             }
         }
 
@@ -441,11 +432,17 @@
             });
             
             try {
+                console.log('Mengambil GeoJSON dari:', GEOJSON_URL);
                 const response = await fetch(GEOJSON_URL);
-                if (!response.ok) throw new Error('Gagal mengambil GeoJSON - Status: ' + response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 const geojson = await response.json();
+                console.log('GeoJSON berhasil dimuat:', geojson);
                 
-                console.log('GeoJSON loaded:', geojson);
+                if (!geojson.features || geojson.features.length === 0) {
+                    throw new Error('GeoJSON tidak memiliki features');
+                }
                 
                 L.geoJSON(geojson, {
                     style: function(feature) {
@@ -491,16 +488,19 @@
                     map.fitBounds(geoLayer.getBounds(), { padding: [50, 50] });
                 }
             } catch (error) {
-                console.warn('GeoJSON load error:', error);
+                console.error('GeoJSON load error:', error);
+                // Tampilkan marker dengan pesan error yang lebih informatif
+                const errorMsg = `
+                    <strong>GeoJSON Tidak Ditemukan</strong><br>
+                    URL: ${GEOJSON_URL}<br>
+                    Error: ${error.message}<br><br>
+                    <small>Pastikan:</small><br>
+                    <small>1. File ruas_jalan.geojson sudah di-upload ke GitHub</small><br>
+                    <small>2. URL sudah benar (cek di browser)</small><br>
+                    <small>3. Repository bersifat Public</small>
+                `;
                 L.marker([-6.9431, 107.7539]).addTo(map)
-                    .bindPopup(`<strong>File GeoJSON tidak ditemukan</strong><br><br>
-                                Periksa URL GitHub Anda:<br>
-                                <small>${GEOJSON_URL}</small><br><br>
-                                Error: ${error.message}<br><br>
-                                <strong>Pastikan:</strong><br>
-                                1. File ruas_jalan.geojson sudah di-upload ke GitHub<br>
-                                2. URL sudah benar (gunakan tombol "Raw" di GitHub)<br>
-                                3. Repository bersifat Public`)
+                    .bindPopup(errorMsg)
                     .openPopup();
             }
         }
@@ -538,7 +538,6 @@
             });
         }
 
-        // Grafik Tren Tahunan (untuk semua data)
         function updateTrendChart() {
             const ctx = document.getElementById('trendChart').getContext('2d');
             const years = [...new Set(roadData.map(row => row['TAHUN']))].sort();
@@ -623,13 +622,11 @@
             });
         }
 
-        // Update Tabel dengan Header Dinamis
         function updateTable(data) {
             const thead = document.getElementById('tableHead');
             const tbody = document.getElementById('tableBody');
             
-            // Buat header tabel dari data yang ada
-            const displayColumns = ['NAMA RUAS JALAN', 'PANJANG', 'DESA KIRI', 'DESA KANAN', 'BAIK (KM)', 'SEDANG (KM)', 'RUSAK (KM)', 'TAHUN'];
+            const displayColumns = ['NAMA RUAS JALAN', 'PANJANG', 'DESA KIRI', 'DESA KANAN', 'BAIK (KM)', 'SEDANG (KM)', 'RUSAK (KM)'];
             
             thead.innerHTML = '<tr>' + displayColumns.map(col => `<th>${col}</th>`).join('') + '<th>Status</th></tr>';
             
@@ -653,38 +650,22 @@
                     <td>${(row['BAIK (KM)'] || 0).toFixed(2)}</td>
                     <td>${(row['SEDANG (KM)'] || 0).toFixed(2)}</td>
                     <td>${(row['RUSAK (KM)'] || 0).toFixed(2)}</td>
-                    <td>${row['TAHUN'] || '-'}</td>
                     <td><span class="badge ${badgeClass}">${status}</span></td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        // Format angka untuk tampilan
-        function formatValue(key, value) {
-            // Skip kolom tertentu
-            if (key === 'TAHUN' || key === 'SATUAN') return null;
-            
-            // Format persentase tanpa desimal
-            if (key.includes('(%)')) {
-                return Math.round(value) + '%';
-            }
-            
-            // Format angka desimal untuk KM
-            if (key.includes('(KM)')) {
-                return value.toFixed(2) + ' km';
-            }
-            
-            // Format PANJANG dengan satuan
-            if (key === 'PANJANG') {
-                return value.toFixed(2) + ' km';
-            }
-            
-            // Untuk teks biasa
-            return value;
+        // Format helper untuk angka
+        function formatKM(value) {
+            return (parseFloat(value) || 0).toFixed(2);
+        }
+        
+        function formatPercent(value) {
+            return Math.round(parseFloat(value) || 0);
         }
 
-        // Detail Section - Tampilkan SEMUA data dari spreadsheet
+        // Detail Section - Format Ringkas
         function updateDetailSection(data) {
             const detailSection = document.getElementById('detailSection');
             
@@ -692,137 +673,85 @@
                 detailSection.style.display = 'block';
                 document.getElementById('detailRoadName').textContent = selectedRoad;
                 
-                // Tab 1: Semua Data (Dinamis dari semua kolom spreadsheet)
+                const currentRow = data[0];
+                
+                // Tab 1: Semua Data (Format Ringkas - TANPA TAHUN)
                 const allDataDiv = document.getElementById('roadDetailAll');
                 allDataDiv.innerHTML = '';
                 
-                const currentRow = data[0];
+                // Kolom yang ingin ditampilkan (KECUALI TAHUN)
+                const displayFields = allHeaders.filter(h => h !== 'TAHUN');
                 
-                // Kelompokkan data
-                const infoFields = ['NAMA RUAS JALAN', 'PANJANG', 'DESA KIRI', 'DESA KANAN', 'KECAMATAN'];
-                const conditionKmFields = ['BAIK (KM)', 'SEDANG (KM)', 'RUSAK (KM)', 'RINGAN (KM)', 'BERAT (KM)'];
-                const conditionPercentFields = ['BAIK (%)', 'SEDANG (%)', 'RUSAK (%)', 'RINGAN (%)', 'BERAT (%)'];
-                const surfaceFields = ['LASTON (KM)', 'LASTON (%)', 'BIDIRI (KM)', 'BIDIRI (%)', 
-                                       'TANAH (KM)', 'TANAH (%)', 'BATU (KM)', 'BATU (%)',
-                                       'PENETRASI (KM)', 'PENETRASI (%)', 'RIGID (KM)', 'RIGID (%)'];
-                
-                // Section: Informasi Umum
-                const infoTitle = document.createElement('div');
-                infoTitle.className = 'detail-section-title';
-                infoTitle.textContent = 'Informasi Umum';
-                allDataDiv.appendChild(infoTitle);
-                
-                infoFields.forEach(header => {
+                displayFields.forEach(header => {
                     if (header && currentRow[header] !== undefined && currentRow[header] !== '') {
-                        const formattedValue = formatValue(header, currentRow[header]);
-                        if (formattedValue !== null) {
-                            const item = document.createElement('div');
-                            item.className = 'detail-item';
-                            item.innerHTML = `
-                                <div class="detail-label">${header}</div>
-                                <div class="detail-value">${formattedValue}</div>
-                            `;
-                            allDataDiv.appendChild(item);
+                        const item = document.createElement('div');
+                        item.className = 'detail-item';
+                        
+                        let value = currentRow[header];
+                        let displayValue = value;
+                        let unit = '';
+                        
+                        // Format berdasarkan tipe kolom
+                        if (header.includes('(KM)') || header === 'PANJANG') {
+                            displayValue = formatKM(value);
+                            unit = 'km';
+                        } else if (header.includes('(%)')) {
+                            displayValue = formatPercent(value);
+                            unit = '%';
                         }
-                    }
-                });
-                
-                // Section: Kondisi Jalan (KM)
-                const condKmTitle = document.createElement('div');
-                condKmTitle.className = 'detail-section-title';
-                condKmTitle.textContent = 'Kondisi Jalan (Panjang)';
-                allDataDiv.appendChild(condKmTitle);
-                
-                conditionKmFields.forEach(header => {
-                    if (header && currentRow[header] !== undefined) {
-                        const formattedValue = formatValue(header, currentRow[header]);
-                        if (formattedValue !== null && currentRow[header] > 0) {
-                            const item = document.createElement('div');
-                            item.className = 'detail-item';
-                            let color = 'var(--gray-800)';
-                            if (header.includes('BAIK')) color = 'var(--success)';
-                            else if (header.includes('SEDANG') || header.includes('RINGAN')) color = 'var(--warning)';
-                            else if (header.includes('RUSAK') || header.includes('BERAT')) color = 'var(--danger)';
-                            
-                            item.innerHTML = `
-                                <div class="detail-label">${header}</div>
-                                <div class="detail-value" style="color: ${color};">${formattedValue}</div>
-                            `;
-                            allDataDiv.appendChild(item);
-                        }
-                    }
-                });
-                
-                // Section: Kondisi Jalan (%)
-                const condPercentTitle = document.createElement('div');
-                condPercentTitle.className = 'detail-section-title';
-                condPercentTitle.textContent = 'Kondisi Jalan (Persentase)';
-                allDataDiv.appendChild(condPercentTitle);
-                
-                conditionPercentFields.forEach(header => {
-                    if (header && currentRow[header] !== undefined) {
-                        const formattedValue = formatValue(header, currentRow[header]);
-                        if (formattedValue !== null) {
-                            const item = document.createElement('div');
-                            item.className = 'detail-item';
-                            let color = 'var(--gray-800)';
-                            if (header.includes('BAIK')) color = 'var(--success)';
-                            else if (header.includes('SEDANG') || header.includes('RINGAN')) color = 'var(--warning)';
-                            else if (header.includes('RUSAK') || header.includes('BERAT')) color = 'var(--danger)';
-                            
-                            item.innerHTML = `
-                                <div class="detail-label">${header}</div>
-                                <div class="detail-value" style="color: ${color};">${formattedValue}</div>
-                            `;
-                            allDataDiv.appendChild(item);
-                        }
-                    }
-                });
-                
-                // Section: Jenis Perkerasan
-                const surfaceTitle = document.createElement('div');
-                surfaceTitle.className = 'detail-section-title';
-                surfaceTitle.textContent = 'Jenis Perkerasan';
-                allDataDiv.appendChild(surfaceTitle);
-                
-                surfaceFields.forEach(header => {
-                    if (header && currentRow[header] !== undefined) {
-                        const formattedValue = formatValue(header, currentRow[header]);
-                        if (formattedValue !== null && currentRow[header] > 0) {
-                            const item = document.createElement('div');
-                            item.className = 'detail-item';
-                            item.innerHTML = `
-                                <div class="detail-label">${header}</div>
-                                <div class="detail-value">${formattedValue}</div>
-                            `;
-                            allDataDiv.appendChild(item);
-                        }
+                        
+                        item.innerHTML = `
+                            <div class="detail-label">${header}</div>
+                            <div class="detail-value">${displayValue} <span class="detail-unit">${unit}</span></div>
+                        `;
+                        allDataDiv.appendChild(item);
                     }
                 });
                 
                 // Tab 2: Kondisi Jalan (Highlight)
                 const conditionDiv = document.getElementById('roadDetailCondition');
                 conditionDiv.innerHTML = '';
-                const conditionFields = ['PANJANG', 'BAIK (KM)', 'BAIK (%)', 'SEDANG (KM)', 'SEDANG (%)', 
-                                         'RUSAK (KM)', 'RUSAK (%)', 'RINGAN (KM)', 'RINGAN (%)', 'BERAT (KM)', 'BERAT (%)'];
                 
-                conditionFields.forEach(field => {
-                    if (currentRow[field] !== undefined) {
-                        const formattedValue = formatValue(field, currentRow[field]);
-                        if (formattedValue !== null) {
-                            const item = document.createElement('div');
-                            item.className = 'detail-item';
-                            let color = 'var(--gray-800)';
-                            if (field.includes('BAIK')) color = 'var(--success)';
-                            else if (field.includes('SEDANG') || field.includes('RINGAN')) color = 'var(--warning)';
-                            else if (field.includes('RUSAK') || field.includes('BERAT')) color = 'var(--danger)';
-                            
-                            item.innerHTML = `
-                                <div class="detail-label">${field}</div>
-                                <div class="detail-value" style="color: ${color};">${formattedValue}</div>
-                            `;
-                            conditionDiv.appendChild(item);
-                        }
+                const conditionGroups = [
+                    { label: 'Panjang Total', km: 'PANJANG', percent: null },
+                    { label: 'Kondisi Baik', km: 'BAIK (KM)', percent: 'BAIK (%)' },
+                    { label: 'Kondisi Sedang', km: 'SEDANG (KM)', percent: 'SEDANG (%)' },
+                    { label: 'Kondisi Rusak', km: 'RUSAK (KM)', percent: 'RUSAK (%)' }
+                ];
+                
+                conditionGroups.forEach(group => {
+                    const item = document.createElement('div');
+                    item.className = 'detail-item';
+                    
+                    let kmValue = currentRow[group.km] !== undefined ? formatKM(currentRow[group.km]) : '-';
+                    let percentValue = group.percent && currentRow[group.percent] !== undefined ? formatPercent(currentRow[group.percent]) : null;
+                    
+                    let color = 'var(--gray-800)';
+                    if (group.label.includes('Baik')) color = 'var(--success)';
+                    else if (group.label.includes('Sedang')) color = 'var(--warning)';
+                    else if (group.label.includes('Rusak')) color = 'var(--danger)';
+                    
+                    item.innerHTML = `
+                        <div class="detail-label">${group.label}</div>
+                        <div class="detail-group">
+                            <span class="detail-main" style="color: ${color};">${kmValue} km</span>
+                            ${percentValue !== null ? `<span class="detail-sub">(${percentValue}%)</span>` : ''}
+                        </div>
+                    `;
+                    conditionDiv.appendChild(item);
+                });
+                
+                // Tambah info tambahan
+                const additionalFields = ['DESA KIRI', 'DESA KANAN', 'KECAMATAN', 'SATUAN'];
+                additionalFields.forEach(field => {
+                    if (currentRow[field] !== undefined && currentRow[field] !== '') {
+                        const item = document.createElement('div');
+                        item.className = 'detail-item';
+                        item.innerHTML = `
+                            <div class="detail-label">${field}</div>
+                            <div class="detail-value">${currentRow[field]}</div>
+                        `;
+                        conditionDiv.appendChild(item);
                     }
                 });
                 
@@ -834,7 +763,6 @@
             }
         }
 
-        // Grafik Tren untuk 1 Ruas Jalan
         function updateRoadTrendChart(roadName) {
             const ctx = document.getElementById('roadTrendChart').getContext('2d');
             const roadHistory = roadData.filter(row => row['NAMA RUAS JALAN'] === roadName);
@@ -900,7 +828,6 @@
             });
         }
 
-        // Switch Tab
         function switchTab(tabName) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
