@@ -725,99 +725,147 @@
             return Math.round((kmValue / totalPanjang) * 100);
         }
 
-        function updateDetailSection(data) {
-            const detailSection = document.getElementById('detailSection');
+    function updateDetailSection(data) {
+    const detailSection = document.getElementById('detailSection');
+    
+    if (selectedRoad && data.length > 0) {
+        detailSection.style.display = 'block';
+        document.getElementById('detailRoadName').textContent = selectedRoad;
+        
+        const currentRow = data[0];
+        const totalPanjang = currentRow['PANJANG'] || 0;
+        
+        const allDataDiv = document.getElementById('roadDetailAll');
+        allDataDiv.innerHTML = '';
+        
+        // Fields to combine (KM and %)
+        const combinableFields = ['BAIK', 'SEDANG', 'RINGAN', 'BERAT', 'LASTON', 'RIGID', 'TANAH', 'BATU', 'PENETRASI'];
+        
+        // Track which fields have been processed
+        const processedFields = new Set();
+        
+        // First, process combinable fields
+        combinableFields.forEach(baseName => {
+            const kmField = `${baseName} (KM)`;
+            const percentField = `${baseName} (%)`;
             
-            if (selectedRoad && data.length > 0) {
-                detailSection.style.display = 'block';
-                document.getElementById('detailRoadName').textContent = selectedRoad;
+            const kmValue = currentRow[kmField];
+            
+            // Only display if KM field exists and is not empty
+            if (kmValue !== undefined && kmValue !== '' && parseFloat(kmValue) > 0) {
+                const item = document.createElement('div');
+                item.className = 'detail-item';
                 
-                const currentRow = data[0];
-                const totalPanjang = currentRow['PANJANG'] || 0;
+                // ALWAYS calculate percentage from KM value and total panjang
+                const calculatedPercent = calculatePercent(parseFloat(kmValue), totalPanjang);
+                const displayValue = `${formatKM(kmValue)} km (${calculatedPercent}%)`;
                 
-                const allDataDiv = document.getElementById('roadDetailAll');
-                allDataDiv.innerHTML = '';
+                item.innerHTML = `
+                    <div class="detail-label">${baseName}</div>
+                    <div class="detail-value">${displayValue}</div>
+                `;
+                allDataDiv.appendChild(item);
                 
-                const displayFields = allHeaders.filter(h => h !== 'TAHUN' && h !== 'SATUAN');
+                processedFields.add(kmField);
+                processedFields.add(percentField);
+            } else if (kmValue !== undefined && kmValue !== '' && parseFloat(kmValue) === 0) {
+                // Also show fields with 0 km
+                const item = document.createElement('div');
+                item.className = 'detail-item';
                 
-                displayFields.forEach(header => {
-                    if (header && currentRow[header] !== undefined && currentRow[header] !== '') {
-                        const item = document.createElement('div');
-                        item.className = 'detail-item';
-                        
-                        let value = currentRow[header];
-                        let displayValue = value;
-                        let unit = '';
-                        
-                        if (header.includes('(KM)') || header === 'PANJANG') {
-                            displayValue = formatKM(value);
-                            unit = 'km';
-                        } else if (header.includes('(%)')) {
-                            const kmHeader = header.replace('(%)', '(KM)');
-                            const kmValue = currentRow[kmHeader] || 0;
-                            displayValue = calculatePercent(kmValue, totalPanjang);
-                            unit = '%';
-                        }
-                        
-                        item.innerHTML = `
-                            <div class="detail-label">${header}</div>
-                            <div class="detail-value">${displayValue} <span class="detail-unit">${unit}</span></div>
-                        `;
-                        allDataDiv.appendChild(item);
-                    }
-                });
+                const displayValue = `0.00 km (0%)`;
                 
-                const conditionDiv = document.getElementById('roadDetailCondition');
-                conditionDiv.innerHTML = '';
+                item.innerHTML = `
+                    <div class="detail-label">${baseName}</div>
+                    <div class="detail-value">${displayValue}</div>
+                `;
+                allDataDiv.appendChild(item);
                 
-                const conditionGroups = [
-                    { label: 'Panjang Total', km: 'PANJANG', percent: null },
-                    { label: 'Kondisi Baik', km: 'BAIK (KM)', percent: 'BAIK (%)' },
-                    { label: 'Kondisi Sedang', km: 'SEDANG (KM)', percent: 'SEDANG (%)' },
-                    { label: 'Kondisi Rusak', km: 'RUSAK (KM)', percent: 'RUSAK (%)' }
-                ];
-                
-                conditionGroups.forEach(group => {
-                    const item = document.createElement('div');
-                    item.className = 'detail-item';
-                    
-                    let kmValue = currentRow[group.km] !== undefined ? formatKM(currentRow[group.km]) : '-';
-                    let percentValue = group.percent ? calculatePercent(currentRow[group.km] || 0, totalPanjang) : null;
-                    
-                    let color = 'var(--gray-800)';
-                    if (group.label.includes('Baik')) color = 'var(--success)';
-                    else if (group.label.includes('Sedang')) color = 'var(--warning)';
-                    else if (group.label.includes('Rusak')) color = 'var(--danger)';
-                    
-                    item.innerHTML = `
-                        <div class="detail-label">${group.label}</div>
-                        <div class="detail-group">
-                            <span class="detail-main" style="color: ${color};">${kmValue} km</span>
-                            ${percentValue !== null ? `<span class="detail-sub">(${percentValue}%)</span>` : ''}
-                        </div>
-                    `;
-                    conditionDiv.appendChild(item);
-                });
-                
-                const additionalFields = ['DESA KIRI', 'DESA KANAN', 'KECAMATAN'];
-                additionalFields.forEach(field => {
-                    if (currentRow[field] !== undefined && currentRow[field] !== '') {
-                        const item = document.createElement('div');
-                        item.className = 'detail-item';
-                        item.innerHTML = `
-                            <div class="detail-label">${field}</div>
-                            <div class="detail-value">${currentRow[field]}</div>
-                        `;
-                        conditionDiv.appendChild(item);
-                    }
-                });
-                
-                updateRoadTrendChart(selectedRoad);
-                
-            } else {
-                detailSection.style.display = 'none';
+                processedFields.add(kmField);
+                processedFields.add(percentField);
             }
-        }
+        });
+        
+        // Then, process remaining fields that are not combinable
+        const displayFields = allHeaders.filter(h => 
+            h !== 'TAHUN' && 
+            h !== 'SATUAN' && 
+            !combinableFields.some(base => h === `${base} (KM)` || h === `${base} (%)`)
+        );
+        
+        displayFields.forEach(header => {
+            if (header && currentRow[header] !== undefined && currentRow[header] !== '') {
+                const item = document.createElement('div');
+                item.className = 'detail-item';
+                
+                let value = currentRow[header];
+                let displayValue = value;
+                let unit = '';
+                
+                if (header === 'PANJANG') {
+                    displayValue = formatKM(value);
+                    unit = 'km';
+                }
+                
+                item.innerHTML = `
+                    <div class="detail-label">${header}</div>
+                    <div class="detail-value">${displayValue} ${unit ? `<span class="detail-unit">${unit}</span>` : ''}</div>
+                `;
+                allDataDiv.appendChild(item);
+            }
+        });
+        
+        const conditionDiv = document.getElementById('roadDetailCondition');
+        conditionDiv.innerHTML = '';
+        
+        const conditionGroups = [
+            { label: 'Panjang Total', km: 'PANJANG', percent: null },
+            { label: 'Kondisi Baik', km: 'BAIK (KM)', percent: 'BAIK (%)' },
+            { label: 'Kondisi Sedang', km: 'SEDANG (KM)', percent: 'SEDANG (%)' },
+            { label: 'Kondisi Rusak', km: 'RUSAK (KM)', percent: 'RUSAK (%)' }
+        ];
+        
+        conditionGroups.forEach(group => {
+            const item = document.createElement('div');
+            item.className = 'detail-item';
+            
+            let kmValue = currentRow[group.km] !== undefined ? formatKM(currentRow[group.km]) : '-';
+            let percentValue = group.percent ? calculatePercent(currentRow[group.km] || 0, totalPanjang) : null;
+            
+            let color = 'var(--gray-800)';
+            if (group.label.includes('Baik')) color = 'var(--success)';
+            else if (group.label.includes('Sedang')) color = 'var(--warning)';
+            else if (group.label.includes('Rusak')) color = 'var(--danger)';
+            
+            item.innerHTML = `
+                <div class="detail-label">${group.label}</div>
+                <div class="detail-group">
+                    <span class="detail-main" style="color: ${color};">${kmValue} km</span>
+                    ${percentValue !== null ? `<span class="detail-sub">(${percentValue}%)</span>` : ''}
+                </div>
+            `;
+            conditionDiv.appendChild(item);
+        });
+        
+        const additionalFields = ['DESA KIRI', 'DESA KANAN', 'KECAMATAN'];
+        additionalFields.forEach(field => {
+            if (currentRow[field] !== undefined && currentRow[field] !== '') {
+                const item = document.createElement('div');
+                item.className = 'detail-item';
+                item.innerHTML = `
+                    <div class="detail-label">${field}</div>
+                    <div class="detail-value">${currentRow[field]}</div>
+                `;
+                conditionDiv.appendChild(item);
+            }
+        });
+        
+        updateRoadTrendChart(selectedRoad);
+        
+    } else {
+        detailSection.style.display = 'none';
+    }
+}
 
         function updateRoadTrendChart(roadName) {
             const ctx = document.getElementById('roadTrendChart').getContext('2d');
